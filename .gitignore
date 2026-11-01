@@ -1,0 +1,23 @@
+# PlatformIO
+.pio/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets — never commit credentials
+secrets.h
+secrets.yaml
+.env
+
+# SQLite live files (schema lives in pi/, data does not)
+*.db
+*.db-wal
+*.db-shm
+
+# OS
+.DS_Store
+Thumbs.db
