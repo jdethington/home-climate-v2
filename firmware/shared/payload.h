@@ -1,5 +1,7 @@
 // firmware/shared/payload.h — wire contract between node, gateway, and Pi.
 
+#pragma once
+
 #define FW_VERSION "1.0.0" // bump on every release
 
 struct SensorPayload

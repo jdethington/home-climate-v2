@@ -1,0 +1,104 @@
+#include "transport.h"
+#include <WiFi.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
+
+#define ESPNOW_CHANNEL 1 // must match the gateway's Wi-Fi channel (the AP's channel)
+
+// The send callback runs on the Wi-Fi task, not the main task — volatile
+// so the wait loop actually sees the change.
+static volatile bool sendDone = false;
+static volatile bool sendOk = false;
+static volatile bool downlinkGot = false;
+
+static void onSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
+{
+    (void)info; // we only care about the status, not the destination
+    sendOk = (status == ESP_NOW_SEND_SUCCESS);
+    sendDone = true;
+}
+
+static void onDownlink(const esp_now_recv_info_t *info, const uint8_t *data, int len)
+{
+    // TODO (#18): parse the command (e.g. {"ota": true}). For now, just note it.
+    Serial.printf("Downlink received: %d bytes\n", len);
+    downlinkGot = true;
+}
+
+static bool parseMac(const String &s, uint8_t mac[6])
+{
+    int v[6];
+    if (sscanf(s.c_str(), "%x:%x:%x:%x:%x:%x", &v[0], &v[1], &v[2], &v[3], &v[4], &v[5]) != 6)
+        return false;
+    for (int i = 0; i < 6; i++)
+    {
+        if (v[i] < 0 || v[i] > 255)
+            return false;
+        mac[i] = (uint8_t)v[i];
+    }
+    return true;
+}
+
+// One send attempt: queue the packet, then wait up to 500 ms for the
+// MAC-ACK callback. esp_now_send() only queues — the callback is the truth.
+static bool sendOnce(const uint8_t *peer, const SensorPayload &pkt)
+{
+    sendDone = false;
+    sendOk = false;
+    if (esp_now_send(peer, (uint8_t *)&pkt, sizeof(pkt)) != ESP_OK)
+        return false;
+    unsigned long start = millis();
+    while (!sendDone && millis() - start < 500)
+        delay(5);
+    return sendDone && sendOk;
+}
+
+void sendPayload(const SensorPayload &pkt, const String &gwMacStr)
+{
+    uint8_t gwMac[6];
+    if (!parseMac(gwMacStr, gwMac))
+    {
+        Serial.printf("Bad gateway MAC in NVS - cannot send");
+        return;
+    }
+
+    WiFi.mode(WIFI_STA); // no WiFi.begin — nodes never join the AP
+    esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+    if (esp_now_init() != ESP_OK)
+    {
+        Serial.printf("ESP-NOW init failed");
+        return;
+    }
+    esp_now_register_send_cb(onSent);
+    esp_now_register_recv_cb(onDownlink);
+
+    esp_now_peer_info_t peer = {};
+    memcpy(peer.peer_addr, gwMac, 6);
+    peer.channel = ESPNOW_CHANNEL;
+    peer.encrypt = false;
+    if (esp_now_add_peer(&peer) != ESP_OK)
+    {
+        Serial.printf("Failed to add gateway peer");
+        return;
+    }
+
+    bool delivered = false;
+    for (int attempt = 1; attempt <= 3 && !delivered; attempt++)
+    {
+        delivered = sendOnce(gwMac, pkt);
+        if (!delivered)
+        {
+
+            Serial.printf("Send attempt %d failed - retrying\n", attempt);
+            delay(100); // small delay before retrying
+        }
+    }
+    Serial.println(delivered ? "Delivered (MAC-ACK)" : "Failed to deliver after 3 attempts - sleeping anyway");
+
+    // Downlink listen window: the gateway may send a command (OTA trigger in #18)
+    unsigned long start = millis();
+    while (millis() - start < 2000)
+        delay(10);
+    if (downlinkGot)
+        Serial.println("Downlink command received (not handled yet)");
+}
