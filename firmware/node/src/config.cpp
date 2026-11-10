@@ -23,7 +23,7 @@ static void provision(Preferences &prefs)
     Serial.println("NVS empty — provisioning mode.");
     Serial.println("Send one key=value line per key, then 'done':");
     Serial.println("  wifi_ssid, wifi_pass, gw_mac, node_id, node_name");
-    Serial.println("Example: wifi_ssid=Brimhall22");
+    Serial.println("Example: wifi_ssid=MyWiFi");
 
     while (true)
     {
