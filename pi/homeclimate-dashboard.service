@@ -1,0 +1,15 @@
+[Unit]
+Description=Home Climate dashboard
+After=network-online.target homeclimate.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=piadmin
+WorkingDirectory=/home/piadmin/home-climate-v2/pi
+ExecStart=/home/piadmin/home-climate-v2/pi/venv/bin/python dashboard.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
