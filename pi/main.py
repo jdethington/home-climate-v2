@@ -16,6 +16,9 @@ import paho.mqtt.client as mqtt
 from database import Database
 from recommendation import Recommender
 
+from notifier import send_flip
+import os
+
 def load_config(path="config.yaml"):
     with open(path) as f:
         return yaml.safe_load(f)
@@ -57,6 +60,15 @@ def on_message(client, userdata, msg):
         print(f"Recommendation flipped: {userdata['last_verdict']} -> {verdict}")
         userdata["last_verdict"] = verdict
 
+        ntfy_cfg = userdata.get("ntfy", {})
+        if ntfy_cfg.get("enabled", True):
+            send_flip(
+                ntfy_cfg.get("topic", ""),
+                verdict,
+                reasons,
+                ntfy_cfg.get("quiet_start", 22),
+                ntfy_cfg.get("quiet_end", 7),
+            )
     # Retained: the verdict is state, not an event — a late subscriber
     # (dashboard, future services) should see the current verdict
     # immediately instead of waiting for the next reading.
@@ -74,10 +86,15 @@ def main():
     db = Database(config["database"]["path"])
     recommender = Recommender(config)
 
+    ntfy_cfg = config.get("ntfy", {})
+    ntfy_cfg["topic"] = os.environ.get("NTFY_TOPIC", "")
+
+
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     client.user_data_set({"topics": mqtt_config["topics"], "db": db, "recommender": recommender, "last_verdict": "CLOSED"})
     client.on_connect = on_connect
     client.on_message = on_message
+    client.user_data_set({"topics": mqtt_config["topics"], "db": db, "recommender": recommender, "last_verdict": "CLOSED", "ntfy": config.get("ntfy", {})})
 
     # The broker may not be up yet when this service starts — retry
     # instead of crashing and letting systemd restart us in a loop.

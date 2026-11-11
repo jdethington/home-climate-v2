@@ -16,3 +16,8 @@ database:
 
 dashboard:
   port: 5000
+
+ntfy:
+  enabled: true
+  quiet_start: 22
+  quiet_end: 7
