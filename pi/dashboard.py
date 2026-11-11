@@ -48,7 +48,7 @@ def api_status():
                 ) m ON r.node_id = m.node_id AND r.ts = m.max_ts
                ORDER BY r.node_id"""
         ).fetchall()
-        status = [
+        sensors = [
             {
                 "node_id": row[0],
                 "ts": row[1],
