@@ -1,8 +1,12 @@
 """Dashboard (issue #13): live status + history graphs, served by Flask.
 
 Reads the SQLite database only — no MQTT client here. The current
-recommendation comes from the events table (the latest flip's target,
-CLOSED when nothing has flipped yet). Listens on all interfaces so
+recommendation + reasons now come from latest_recommendation, 
+written every cycle by the logging service 
+(CLOSED with no reasons before the first reading). 
+No ordering worry — the dashboard's own Database() call runs the migration, 
+so the table exists whichever service starts first. 
+History graphs come from the readings table. Listens on all interfaces so
 the page is reachable on the LAN via mDNS (http://climatepi.local:5000).
 """
 
@@ -19,16 +23,6 @@ def load_config(path="config.yaml"):
 app = Flask(__name__)
 config = load_config()
 DB_PATH = config["database"]["path"]
-
-def current_recommendation(db):
-    row = db.conn.execute(
-        "SELECT detail FROM events WHERE type = 'recommendation' "
-        "ORDER BY id DESC LIMIT 1"
-    ).fetchone()
-    if row is None:
-        return "CLOSED"
-    # detail is like "OPEN -> CLOSED" or "CLOSED -> OPEN", so we take the last part
-    return row[0].split("->")[-1].strip()
 
 @app.route("/")
 def index():
@@ -59,9 +53,11 @@ def api_status():
             }
             for row in latest
         ]
+        verdict, reasons = db.get_latest_recommendation()
         return jsonify(
-            { "recommendation": current_recommendation(db), "sensors": sensors}
+            {"recommendation": verdict, "reasons": reasons, "sensors": sensors}
         )
+
     finally:
         db.close()
 
