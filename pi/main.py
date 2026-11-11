@@ -61,7 +61,7 @@ def on_message(client, userdata, msg):
     # immediately instead of waiting for the next reading.
     client.publish(
         "homeclimate/recommendation", 
-        json.dumps({"verdict": verdict}),
+        json.dumps({"recommendation": verdict}),
         retain=True
     )
     stamp = datetime.now().isoformat(timespec='seconds')
