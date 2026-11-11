@@ -99,21 +99,70 @@ class Recommender:
         hums = sum(hums) / len(hums)
         return temps, hums, dew_point(temps, hums)
 
-    def recommend(self):
-        """Return OPEN/CLOSED based on indoor vs outdoor averages."""
-        indoor = self._zone_average(self.indoor)
-        outdoor = self._zone_average(self.outdoor)
-        if indoor is None or outdoor is None:
-            return self.state  # no change
-        margin = indoor[0] - outdoor[0]
-        # A missing dew point fails the gate closed — never open on
-        # conditions you cannot verify.
-        dp_ok = (indoor[2] is not None and outdoor[2] is not None 
-                 and outdoor[2] <= indoor[2] - self.dewpoint_margin)
-        if self.state == "OPEN":
-            if margin < self.hold_margin or not dp_ok:
-                self.state = "CLOSED"
-        else:  # CLOSED
-            if margin >= self.open_margin and dp_ok:
-                self.state = "OPEN"
-        return self.state
+def recommend(self):
+    """Return (state, reasons): the verdict and why, in plain words."""
+    indoor = self._zone_average(self.indoor)
+    outdoor = self._zone_average(self.outdoor)
+    if indoor is None:
+        return self.state, ["waiting for indoor readings"]
+    if outdoor is None:
+        return self.state, ["waiting for outdoor readings"]
+    indoor_temp, indoor_hum, indoor_dp = indoor
+    outdoor_temp, outdoor_hum, outdoor_dp = outdoor
+    margin = indoor_temp - outdoor_temp
+    reasons = []
+    if margin >= 0:
+        reasons.append(
+            f"outdoor {outdoor_temp:.1f}C is {margin:.1f}C cooler "
+            f"than indoor {indoor_temp:.1f}C"
+        )
+    else:
+        reasons.append(
+            f"outdoor {outdoor_temp:.1f}C is {-margin:.1f}C warmer "
+            f"than indoor {indoor_temp:.1f}C"
+        )
+    # A missing dew point fails the gate closed — never open on
+    # conditions you cannot verify.
+    dp_ok = (indoor_dp is not None and outdoor_dp is not None
+             and outdoor_dp <= indoor_dp - self.dewpoint_margin)
+    if indoor_dp is None or outdoor_dp is None:
+        reasons.append("dew point unavailable (missing humidity)")
+    elif dp_ok:
+        reasons.append(
+            f"outdoor dew point {outdoor_dp:.1f}C is below "
+            f"indoor {indoor_dp:.1f}C"
+        )
+    else:
+        reasons.append(
+            f"outdoor dew point {outdoor_dp:.1f}C is above "
+            f"indoor {indoor_dp:.1f}C "
+            f"(needs <= {indoor_dp - self.dewpoint_margin:.1f}C)"
+        )
+    if self.state == "OPEN":
+        if margin < self.hold_margin or not dp_ok:
+            self.state = "CLOSED"
+            if margin < self.hold_margin:
+                reasons.append(
+                    f"closing: margin {margin:.1f}C below "
+                    f"hold {self.hold_margin:.1f}C"
+                )
+            else:
+                reasons.append("closing: dew point gate failed")
+        else:
+            reasons.append(
+                f"staying open: margin {margin:.1f}C above "
+                f"hold {self.hold_margin:.1f}C"
+            )
+    else:  # CLOSED
+        if margin >= self.open_margin and dp_ok:
+            self.state = "OPEN"
+            reasons.append(
+                f"opening: margin {margin:.1f}C meets "
+                f"open {self.open_margin:.1f}C"
+            )
+        elif margin < self.open_margin:
+            reasons.append(
+                f"staying closed: margin {margin:.1f}C below "
+                f"open {self.open_margin:.1f}C"
+            )
+    return self.state, reasons

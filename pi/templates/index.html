@@ -47,6 +47,7 @@
         <button id="unit-toggle">°C / °F</button>
         <button id="update-now">Update Now</button>
     </p>
+    <ul id="reasons"></ul>
     <div class="cards" id="cards"></div>
     <div id="charts"></div>
     <script>
@@ -63,6 +64,13 @@
             const rec = document.getElementById("recommendation");
             rec.textContent = data.recommendation;
             rec.className = data.recommendation === "OPEN" ? "rec-open" : "rec-closed";
+            const reasonsEl = document.getElementById("reasons");
+            reasonsEl.innerHTML = "";
+            (data.reasons || []).forEach((r) => {
+                const li = document.createElement("li");
+                li.textContent = r;
+                reasonsEl.appendChild(li);
+            });
             sensors = data.sensors;
             const cards = document.getElementById("cards");
             cards.innerHTML = "";

@@ -10,12 +10,20 @@ r = Recommender()
 r.update("indoor1", 27.3, 34)
 r.update("outdoor1", 25.3, 57.1)
 print("real readings:", r.recommend())   # expect CLOSED
+state, reasons = r.recommend()
+print("real readings:", state, reasons)   # expect CLOSED
+assert state == "CLOSED"
+assert any("dew point" in reason for reason in reasons)
 
 # 2. Cool dry evening — both gates pass
 r = Recommender()
 r.update("indoor1", 27, 40)
 r.update("outdoor1", 22, 40)
 print("cool dry evening:", r.recommend())   # expect OPEN
+state, reasons = r.recommend()
+print("cool dry evening:", state, reasons)   # expect OPEN
+assert state == "OPEN"
+assert any("cooler" in reason for reason in reasons)
 
 # 3. Hysteresis — window of 1 so each update replaces the last
 r = Recommender({"recommendation": {"average_readings": 1}})

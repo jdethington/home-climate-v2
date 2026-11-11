@@ -1,7 +1,7 @@
 """Logging service (issue #12): MQTT -> SQLite + recommendation.
 
 Subscribes to homeclimate/sensor/#, stores every reading, recomputes
-the recommendation each cycle, publishes homeclimate/recommendation,
+the recommendation each cycle, publishes homeclimate/recommendation with a reasons array,
 and logs OPEN/CLOSED flips to the events table. Runs as a systemd
 service (pi/homeclimate.service).
 """
@@ -47,7 +47,8 @@ def on_message(client, userdata, msg):
     userdata["recommender"].update(
         node_id, payload.get("temp_c"), payload.get("humidity")
     )
-    verdict = userdata["recommender"].recommend()
+    verdict, reasons = userdata["recommender"].recommend()
+    userdata["db"].set_latest_recommendation(verdict, reasons)
 
     if verdict != userdata["last_verdict"]:
         userdata["db"].insert_event(
@@ -60,12 +61,12 @@ def on_message(client, userdata, msg):
     # (dashboard, future services) should see the current verdict
     # immediately instead of waiting for the next reading.
     client.publish(
-        "homeclimate/recommendation", 
-        json.dumps({"recommendation": verdict}),
-        retain=True
+        "homeclimate/recommendation",
+        json.dumps({"recommendation": verdict, "reasons": reasons}),
+        retain=True,
     )
     stamp = datetime.now().isoformat(timespec='seconds')
-    print(f"{stamp} {msg.topic}: {msg.payload.decode()} -> {verdict}")
+    print(f"{stamp} {msg.topic}: {msg.payload.decode()} -> {verdict}: {'; '.join(reasons)}")
 
 def main():
     config = load_config()

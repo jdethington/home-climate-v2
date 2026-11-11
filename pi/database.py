@@ -9,6 +9,8 @@ ingestion, in UTC ISO format: never trust a deep-sleep node's clock
 import sqlite3
 from datetime import datetime, timezone
 
+import json
+
 
 # Migrations run in order on every startup; each one only runs if the
 # stored version is below its number, so re-running is safe.
@@ -33,6 +35,18 @@ MIGRATIONS = {
         "CREATE INDEX IF NOT EXISTS idx_readings_node_ts ON readings (node_id, ts)",
         "CREATE INDEX IF NOT EXISTS idx_events_ts ON events (ts)",
     ],
+
+    2: [
+    # One row, id = 1: the latest verdict + reasons, rewritten every
+    # cycle. The dashboard reads this; the events table keeps only flips.
+    """CREATE TABLE IF NOT EXISTS latest_recommendation (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        ts TEXT NOT NULL,
+        recommendation TEXT NOT NULL,
+        reasons TEXT NOT NULL
+    )""",
+],
+
 }
 
 def _now_iso():
@@ -90,6 +104,22 @@ class Database:
             (_now_iso(), type, detail),
         )
         self.conn.commit()
+
+    def set_latest_recommendation(self, recommendation, reasons):
+        self.conn.execute(
+            """INSERT OR REPLACE INTO latest_recommendation
+            (id, ts, recommendation, reasons) VALUES (1, ?, ?, ?)""",
+            (_now_iso(), recommendation, json.dumps(reasons)),
+        )
+        self.conn.commit()
+
+    def get_latest_recommendation(self):
+        row = self.conn.execute(
+            "SELECT recommendation, reasons FROM latest_recommendation WHERE id = 1"
+        ).fetchone()
+        if row is None:
+            return "CLOSED", []
+        return row[0], json.loads(row[1])
 
     def close(self):
         self.conn.close()
