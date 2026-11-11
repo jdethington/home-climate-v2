@@ -45,6 +45,7 @@
     <h1>Home Climate</h1>
     <p>Recommendation: <strong id="recommendation">…</strong>
         <button id="unit-toggle">°C / °F</button>
+        <button id="update-now">Update Now</button>
     </p>
     <div class="cards" id="cards"></div>
     <div id="charts"></div>
@@ -98,16 +99,64 @@
             }
         }
 
+        // Intervals run from the last update (manual or automatic), not from page load.
+        // 5.1 min sits just past the nodes' 5-min send cycle, so each poll catches
+        // the newest reading instead of landing in lockstep with it.
+        const STATUS_INTERVAL_MS = 5.1 * 60 * 1000;
+        const CHARTS_INTERVAL_MS = 15 * 60 * 1000;
+        let statusTimer = null;
+        let chartsTimer = null;
+
+        function scheduleStatus() {
+            clearTimeout(statusTimer);
+            statusTimer = setTimeout(async () => {
+                try {
+                    await loadStatus();
+                } catch (e) {
+                    console.error(e);
+                }
+                scheduleStatus();
+            }, STATUS_INTERVAL_MS);
+        }
+
+        function scheduleCharts() {
+            clearTimeout(chartsTimer);
+            chartsTimer = setTimeout(async () => {
+                try {
+                    await loadCharts();
+                } catch (e) {
+                    console.error(e);
+                }
+                scheduleCharts();
+            }, CHARTS_INTERVAL_MS);
+        }
+
+        async function updateNow() {
+            const btn = document.getElementById("update-now");
+            btn.disabled = true;
+            try {
+                await loadStatus();
+                await loadCharts();
+            } finally {
+                btn.disabled = false;
+            }
+            scheduleStatus();   // restart both clocks from this update
+            scheduleCharts();
+        }
+
+        document.getElementById("update-now").addEventListener("click", updateNow);
+
         document.getElementById("unit-toggle").addEventListener("click", () => {
             unit = unit === "C" ? "F" : "C";
             localStorage.setItem("homeclimate-unit", unit);
-            loadStatus();
-            loadCharts();
+            updateNow();   // re-renders in the new unit, and restarts both clocks
         });
 
-        loadStatus().then(() => loadCharts());
-        setInterval(loadStatus, 30000);            // live numbers every 30s
-        setInterval(loadCharts, 5 * 60 * 1000);    // graphs every 5 min
+        // First load, then start both clocks.
+        loadStatus().then(() => loadCharts()).then(() => {
+            scheduleStatus();
+            scheduleCharts();
+        });
     </script>
 </body>
 
