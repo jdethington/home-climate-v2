@@ -10,3 +10,6 @@ recommendation:
   hold_margin_c: 1.0
   dewpoint_margin_c: 1.0
   average_readings: 3
+
+database:
+  path: "homeclimate.db"
