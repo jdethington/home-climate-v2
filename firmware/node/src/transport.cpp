@@ -3,7 +3,7 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 
-#define ESPNOW_CHANNEL 1 // must match the gateway's Wi-Fi channel (the AP's channel)
+#define ESPNOW_CHANNEL 6 // must match the gateway's Wi-Fi channel (the AP's channel)
 
 // The send callback runs on the Wi-Fi task, not the main task — volatile
 // so the wait loop actually sees the change.
