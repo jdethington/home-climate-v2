@@ -13,3 +13,6 @@ recommendation:
 
 database:
   path: "homeclimate.db"
+
+dashboard:
+  port: 5000
