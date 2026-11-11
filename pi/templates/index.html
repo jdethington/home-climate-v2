@@ -35,6 +35,14 @@
             min-width: 200px;
         }
 
+        .alert-banner {
+            background: #fff3cd;
+            border: 1px solid #e6c200;
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin: 0.5rem 0;
+        }
+
         canvas {
             max-height: 260px;
         }
@@ -47,6 +55,7 @@
         <button id="unit-toggle">°C / °F</button>
         <button id="update-now">Update Now</button>
     </p>
+    <div id="alerts"></div>
     <ul id="reasons"></ul>
     <div class="cards" id="cards"></div>
     <div id="charts"></div>
@@ -87,6 +96,16 @@
                 const li = document.createElement("li");
                 li.textContent = convertReason(r);
                 reasonsEl.appendChild(li);
+            });
+            const alertsEl = document.getElementById("alerts");
+            alertsEl.innerHTML = "";
+            (data.alerts || []).forEach((a) => {
+                const div = document.createElement("div");
+                div.className = "alert-banner";
+                const text = a.headline ? `${a.event} — ${a.headline}` : a.event;
+                const until = a.expires ? ` (until ${fmtTime(a.expires)})` : "";
+                div.textContent = text + until;
+                alertsEl.appendChild(div);
             });
             sensors = data.sensors;
             const cards = document.getElementById("cards");

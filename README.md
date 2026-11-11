@@ -29,6 +29,7 @@ decision logic live on the Pi in Python, so tuning is a config edit, not a refla
 - `homeclimate/recommendation` — current OPEN/CLOSED verdict + reasons array
 - `homeclimate/cmd/<node-id>` — downlink commands (e.g. `{"ota": true}`)
 - `homeclimate/status/<node-id>` — node status (e.g. `ota_ready`)
+- `homeclimate/alerts` — current active dust alerts (retained JSON)
 
 ## Node payload (ESP-NOW binary struct)
 

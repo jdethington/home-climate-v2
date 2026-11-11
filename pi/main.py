@@ -16,8 +16,11 @@ import paho.mqtt.client as mqtt
 from database import Database
 from recommendation import Recommender
 
-from notifier import send_flip
+from notifier import send_flip, send_notification
 import os
+
+import threading
+from nws_alerts import fetch_dust_alerts
 
 def load_config(path="config.yaml"):
     with open(path) as f:
@@ -80,6 +83,53 @@ def on_message(client, userdata, msg):
     stamp = datetime.now().isoformat(timespec='seconds')
     print(f"{stamp} {msg.topic}: {msg.payload.decode()} -> {verdict}: {'; '.join(reasons)}")
 
+def nws_poller(db_path, client, ntfy_cfg, nws_cfg, stop_event):
+    """Background thread (issue #17): poll NWS for dust alerts.
+
+    Polls every poll_interval_minutes; writes the current active set to
+    the nws_alerts table, publishes it retained to homeclimate/alerts, and
+    notifies via ntfy when a NEW warning appears — but only if the
+    windows are open (verdict OPEN), and never during quiet hours. Owns
+    its own Database connection — sqlite3 connections must not be shared
+    across threads. paho's publish() is thread-safe.
+    """
+    db = Database(db_path)
+    # Exact house coordinates come from the environment (systemd override)
+    # — never from the repo. Falls back to the Gilbert center in config.
+    lat = float(os.environ.get("NWS_LATITUDE", nws_cfg.get("latitude", 33.3528)))
+    lon = float(os.environ.get("NWS_LONGITUDE", nws_cfg.get("longitude", -111.7890)))
+    interval = nws_cfg.get("poll_interval_minutes", 15) * 60
+    previous_ids = set()
+    first_poll = True
+    try:
+        while not stop_event.is_set():
+            alerts = fetch_dust_alerts(lat, lon)
+            if alerts is not None:
+                db.set_nws_alerts(alerts)
+                client.publish(
+                    "homeclimate/alerts",
+                    json.dumps({"alerts": alerts}),
+                    retain=True,
+                )
+                print(f"nws: {len(alerts)} active dust alert(s)")
+                current_ids = {a["id"] for a in alerts}
+                if not first_poll and ntfy_cfg.get("enabled", True):
+                    verdict, _ = db.get_latest_recommendation()
+                    for alert in alerts:
+                        if alert["id"] not in previous_ids and verdict == "OPEN":
+                            send_notification(
+                                ntfy_cfg.get("topic", ""),
+                                alert["event"],
+                                alert["headline"] or alert["event"],
+                                ntfy_cfg.get("quiet_start", 22),
+                                ntfy_cfg.get("quiet_end", 7),
+                            )
+                previous_ids = current_ids
+                first_poll = False
+            stop_event.wait(interval)
+    finally:
+        db.close()
+
 def main():
     config = load_config()
     mqtt_config = config["mqtt"]
@@ -107,11 +157,20 @@ def main():
             print(f"Broker not available: {e}. Retrying in 5 seconds...")
             time.sleep(5)
 
+    stop_event = threading.Event()
+    poller = threading.Thread(
+        target=nws_poller,
+        args=(config["database"]["path"], client, ntfy_cfg, config.get("nws", {}), stop_event),
+        daemon=True,
+    )
+    poller.start()
+
     try:
         client.loop_forever()
     except KeyboardInterrupt:
         print("Stopping...")
     finally:
+        stop_event.set()
         client.disconnect()
         db.close()
 
