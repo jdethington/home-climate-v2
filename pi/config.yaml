@@ -21,3 +21,8 @@ ntfy:
   enabled: true
   quiet_start: 22
   quiet_end: 7
+
+nws:
+  latitude: 33.3528
+  longitude: -111.7890
+  poll_interval_minutes: 15

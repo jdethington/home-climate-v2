@@ -54,10 +54,10 @@ def api_status():
             for row in latest
         ]
         verdict, reasons = db.get_latest_recommendation()
+        alerts = db.get_nws_alerts()
         return jsonify(
-            {"recommendation": verdict, "reasons": reasons, "sensors": sensors}
+            {"recommendation": verdict, "reasons": reasons, "sensors": sensors, "alerts": alerts}
         )
-
     finally:
         db.close()
 

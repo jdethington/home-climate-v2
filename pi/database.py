@@ -37,16 +37,30 @@ MIGRATIONS = {
     ],
 
     2: [
-    # One row, id = 1: the latest verdict + reasons, rewritten every
-    # cycle. The dashboard reads this; the events table keeps only flips.
-    """CREATE TABLE IF NOT EXISTS latest_recommendation (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        ts TEXT NOT NULL,
-        recommendation TEXT NOT NULL,
-        reasons TEXT NOT NULL
-    )""",
-],
+        # One row, id = 1: the latest verdict + reasons, rewritten every
+        # cycle. The dashboard reads this; the events table keeps only flips.
+        """CREATE TABLE IF NOT EXISTS latest_recommendation (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            ts TEXT NOT NULL,
+            recommendation TEXT NOT NULL,
+            reasons TEXT NOT NULL
+        )""",
+    ],
 
+    3: [
+        # The current active dust-storm alerts, replaced whole on every
+        # poll. Empty table = no active alerts. fetched_at shows staleness
+        # when a poll fails and the old rows are kept.
+        """CREATE TABLE IF NOT EXISTS nws_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event TEXT NOT NULL,
+            headline TEXT,
+            severity TEXT,
+            onset TEXT,
+            expires TEXT,
+            fetched_at TEXT NOT NULL
+        )""",
+    ],
 }
 
 def _now_iso():
@@ -120,6 +134,25 @@ class Database:
         if row is None:
             return "CLOSED", []
         return row[0], json.loads(row[1])
+
+    def set_nws_alerts(self, alerts):
+        self.conn.execute("DELETE FROM nws_alerts")
+        self.conn.executemany(
+            """INSERT INTO nws_alerts (event, headline, severity, onset, expires, fetched_at)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+            [(a["event"], a["headline"], a["severity"], a["onset"], a["expires"], _now_iso()) for a in alerts],
+        )
+        self.conn.commit()
+
+    def get_nws_alerts(self):
+        rows = self.conn.execute(
+            "SELECT event, headline, severity, onset, expires FROM nws_alerts ORDER BY onset"
+        ).fetchall()
+        return [
+            {"event": r[0], "headline": r[1], "severity": r[2], "onset": r[3], "expires": r[4]}
+            for r in rows
+        ]
+
 
     def close(self):
         self.conn.close()
