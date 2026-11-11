@@ -4,3 +4,9 @@ mqtt:
   port: 1883
   topics:
     - "homeclimate/sensor/#"
+
+recommendation:
+  open_margin_c: 2.0
+  hold_margin_c: 1.0
+  dewpoint_margin_c: 1.0
+  average_readings: 3
