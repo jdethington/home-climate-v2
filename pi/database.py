@@ -153,7 +153,6 @@ class Database:
             for r in rows
         ]
 
-
     def close(self):
         self.conn.close()
         

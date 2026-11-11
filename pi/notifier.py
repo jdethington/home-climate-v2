@@ -41,34 +41,8 @@ def send_notification(topic, title, message, quiet_start=22, quiet_end=7, respec
         print(f"ntfy: failed to send '{title}': {e}")
         return False
 
-
-    def send_flip(topic, verdict, reasons, quiet_start=22, quiet_end=7):
-        """Notify a recommendation flip (respects quiet hours)."""
-        title = f"Windows {verdict}"
-        message = reasons[0] if reasons else verdict
-        return send_notification(topic, title, message, quiet_start, quiet_end)
-
-
-
-# def send_flip(topic, verdict, reasons, quiet_start=22, quiet_end=7):
-#     """Notify the flip. Returns True if sent, False if skipped or failed."""
-#     if not topic:
-#         return False
-#     if is_quiet_hour(datetime.now(), quiet_start, quiet_end):
-#         print(f"ntfy: quiet hours, skipping {verdict} notification")
-#         return False
-#     title = f"Windows {verdict}"
-#     message = reasons[0] if reasons else verdict
-#     req = urllib.request.Request(
-#         f"https://ntfy.sh/{topic}",
-#         data=message.encode("utf-8"),
-#         headers={"Title": title},
-#         method="POST",
-#     )
-#     try:
-#         with urllib.request.urlopen(req, timeout=5) as resp:
-#             print(f"ntfy: sent {verdict} (HTTP {resp.status})")
-#             return True
-#     except (urllib.error.URLError, OSError) as e:
-#         print(f"ntfy: failed to send {verdict}: {e}")
-#         return False
+def send_flip(topic, verdict, reasons, quiet_start=22, quiet_end=7):
+    """Notify a recommendation flip (respects quiet hours)."""
+    title = f"Windows {verdict}"
+    message = reasons[0] if reasons else verdict
+    return send_notification(topic, title, message, quiet_start, quiet_end)
