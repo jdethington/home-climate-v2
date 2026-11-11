@@ -11,7 +11,7 @@ for suffix in ("", "-wal", "-shm"):
         os.remove(DB + suffix)
 
 db = Database(DB)
-print("version:", db.version)  # expect 1
+print("version:", db.version)  # expect 2
 print("journal mode:", db.conn.execute("PRAGMA journal_mode").fetchone()[0])  # expect wal
 
 db.insert_reading("indoor1", 27.3, 34, 4.9, "1.0.0")

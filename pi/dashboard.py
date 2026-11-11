@@ -6,8 +6,7 @@ written every cycle by the logging service
 (CLOSED with no reasons before the first reading). 
 No ordering worry — the dashboard's own Database() call runs the migration, 
 so the table exists whichever service starts first. 
-The history comes from the events table (the latest flip's target,
-CLOSED when nothing has flipped yet). Listens on all interfaces so
+History graphs come from the readings table. Listens on all interfaces so
 the page is reachable on the LAN via mDNS (http://climatepi.local:5000).
 """
 
