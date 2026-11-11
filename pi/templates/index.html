@@ -56,6 +56,23 @@
         const charts = {};
 
         const toDisplay = (c) => c === null ? "—" : (unit === "F" ? (c * 9 / 5 + 32) : c).toFixed(1);
+        // Reasons arrive in Celsius. In °F mode, convert the numbers —
+        // absolute temperatures (13.4C -> 56.1F) and differences (10.8C
+        // cooler -> 19.4F cooler) use different math, so tell them apart
+        // by what follows/precedes the number.
+        function convertReason(reason) {
+            if (unit === "C") return reason;
+            return reason.replace(/(-?\d+(?:\.\d+)?)C/g, (match, num, offset, str) => {
+                const value = parseFloat(num);
+                const after = str.slice(offset + match.length);
+                const before = str.slice(0, offset);
+                const isDiff = /^( cooler| warmer)/.test(after)
+                    || /(margin|hold|open) $/.test(before);
+                const f = isDiff ? value * 9 / 5 : value * 9 / 5 + 32;
+                return f.toFixed(1) + "F";
+            });
+        }
+
         const unitLabel = () => unit === "F" ? "°F" : "°C";
         const fmtTime = (ts) => new Date(ts).toLocaleString([], { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -68,7 +85,7 @@
             reasonsEl.innerHTML = "";
             (data.reasons || []).forEach((r) => {
                 const li = document.createElement("li");
-                li.textContent = r;
+                li.textContent = convertReason(r);
                 reasonsEl.appendChild(li);
             });
             sensors = data.sensors;
