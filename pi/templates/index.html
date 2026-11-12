@@ -63,6 +63,18 @@
         let unit = localStorage.getItem("homeclimate-unit") || "C";
         let sensors = [];
         const charts = {};
+        let lastStatus = null;
+        // Nodes with an OTA update in flight (clicked Update, waiting for ota_ready).
+        const pendingUpdates = new Set();
+        const otaPollers = {};
+        const OTA_FRESH_MS = 10 * 60 * 1000; // the node's OTA window
+
+        function freshOtaStatus(nodeId, statuses) {
+            const st = (statuses || []).find((x) => x.node_id === nodeId);
+            if (!st || st.status !== "ota_ready" || !st.ip) return null;
+            if (Date.now() - new Date(st.ts).getTime() > OTA_FRESH_MS) return null;
+            return st;
+        }
 
         const toDisplay = (c) => c === null ? "—" : (unit === "F" ? (c * 9 / 5 + 32) : c).toFixed(1);
         // Reasons arrive in Celsius. In °F mode, convert the numbers —
@@ -87,6 +99,7 @@
 
         async function loadStatus() {
             const data = await (await fetch("/api/status")).json();
+            lastStatus = data;
             const rec = document.getElementById("recommendation");
             rec.textContent = data.recommendation;
             rec.className = data.recommendation === "OPEN" ? "rec-open" : "rec-closed";
@@ -107,16 +120,28 @@
                 div.textContent = text + until;
                 alertsEl.appendChild(div);
             });
+            const nodeStatus = data.node_status || [];
             sensors = data.sensors;
             const cards = document.getElementById("cards");
             cards.innerHTML = "";
             sensors.forEach((s) => {
+                const ota = freshOtaStatus(s.node_id, nodeStatus);
+                const pending = pendingUpdates.has(s.node_id);
+                let otaHtml;
+                if (ota) {
+                    otaHtml = `<p><a href="http://${ota.ip}/update" target="_blank">Upload firmware</a> (OTA ready)</p>`;
+                } else if (pending) {
+                    otaHtml = `<p>Waiting for node… (up to 5 min)</p>`;
+                } else {
+                    otaHtml = `<button data-update="${s.node_id}">Update firmware</button>`;
+                }
                 const div = document.createElement("div");
                 div.className = "card";
                 div.innerHTML = `<h2>${s.node_id}</h2>
-      <p>${toDisplay(s.temp_c)}${unitLabel()} &nbsp; ${s.humidity === null ? "—" : s.humidity + "% RH"}</p>
-      <p>Battery: ${s.batt_v === null ? "—" : s.batt_v.toFixed(2) + " V"} &nbsp; FW ${s.fw_version}</p>
-      <p>Last seen: ${new Date(s.ts).toLocaleString()}</p>`;
+                    <p>${toDisplay(s.temp_c)}${unitLabel()} &nbsp; ${s.humidity === null ? "—" : s.humidity + "% RH"}</p>
+                    <p>Battery: ${s.batt_v === null ? "—" : s.batt_v.toFixed(2) + " V"} &nbsp; FW ${s.fw_version}</p>
+                    <p>Last seen: ${new Date(s.ts).toLocaleString()}</p>
+                    ${otaHtml}`;
                 cards.appendChild(div);
             });
         }
@@ -187,6 +212,41 @@
             scheduleStatus();   // restart both clocks from this update
             scheduleCharts();
         }
+
+        function waitForOta(nodeId) {
+            if (otaPollers[nodeId]) clearInterval(otaPollers[nodeId]);
+            let tries = 0;
+            otaPollers[nodeId] = setInterval(async () => {
+                tries++;
+                try { await loadStatus(); } catch (e) { console.error(e); }
+                const ota = lastStatus && freshOtaStatus(nodeId, lastStatus.node_status);
+                if (ota || tries >= 12) {  // 12 x 30s = 6 min
+                    clearInterval(otaPollers[nodeId]);
+                    delete otaPollers[nodeId];
+                    pendingUpdates.delete(nodeId);
+                    try { await loadStatus(); } catch (e) { console.error(e); }
+                }
+            }, 30 * 1000);
+        }
+
+        document.getElementById("cards").addEventListener("click", async (e) => {
+            const btn = e.target.closest("[data-update]");
+            if (!btn) return;
+            const nodeId = btn.dataset.update;
+            btn.disabled = true;
+            try {
+                const res = await fetch(`/api/update/${nodeId}`, { method: "POST" });
+                const data = await res.json();
+                if (!data.ok) throw new Error(data.error || "publish failed");
+                pendingUpdates.add(nodeId);
+                waitForOta(nodeId);
+                await loadStatus();  // re-render to show "Waiting…"
+            } catch (err) {
+                alert(`Update failed: ${err.message}`);
+                btn.disabled = false;
+            }
+        });
+
 
         document.getElementById("update-now").addEventListener("click", updateNow);
 

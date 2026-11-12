@@ -1,13 +1,16 @@
 """Dashboard (issue #13): live status + history graphs, served by Flask.
 
-Reads the SQLite database only — no MQTT client here. The current
-recommendation + reasons now come from latest_recommendation, 
-written every cycle by the logging service 
-(CLOSED with no reasons before the first reading). 
-No ordering worry — the dashboard's own Database() call runs the migration, 
-so the table exists whichever service starts first. 
-History graphs come from the readings table. Listens on all interfaces so
-the page is reachable on the LAN via mDNS (http://climatepi.local:5000).
+Reads the SQLite database for status and history; the current
+recommendation + reasons come from latest_recommendation, written every
+cycle by the logging service (CLOSED with no reasons before the first
+reading). No ordering worry — the dashboard's own Database() call runs the migration,
+so the table exists whichever service starts first.
+History graphs come from the readings table. The Update firmware button
+(issue #18) publishes a one-shot {"ota": true} command to
+homeclimate/cmd/<node-id> via paho's publish.single — no persistent MQTT
+client here; the node answers ota_ready on homeclimate/status/<node-id>
+and the dashboard shows the upload link from node_status. Listens on all
+interfaces so the page is reachable on the LAN via mDNS (http://climatepi.local:5000).
 """
 
 import sqlite3
@@ -16,6 +19,8 @@ from flask import Flask, render_template, jsonify, request
 
 from database import Database
 
+from paho.mqtt import publish as mqtt_publish
+
 def load_config(path="config.yaml"):
     with open(path) as f:
         return yaml.safe_load(f)
@@ -23,6 +28,9 @@ def load_config(path="config.yaml"):
 app = Flask(__name__)
 config = load_config()
 DB_PATH = config["database"]["path"]
+
+MQTT_HOST = config["mqtt"]["host"]
+MQTT_PORT = config["mqtt"]["port"]
 
 @app.route("/")
 def index():
@@ -55,8 +63,9 @@ def api_status():
         ]
         verdict, reasons = db.get_latest_recommendation()
         alerts = db.get_nws_alerts()
+        node_status = db.get_node_status()
         return jsonify(
-            {"recommendation": verdict, "reasons": reasons, "sensors": sensors, "alerts": alerts}
+            {"recommendation": verdict, "reasons": reasons, "sensors": sensors, "alerts": alerts, "node_status": node_status}
         )
     finally:
         db.close()
@@ -80,6 +89,21 @@ def history():
         )
     finally:
         db.close()
+
+@app.route("/api/update/<node_id>", methods=["POST"])
+def update_node(node_id):
+    """Trigger a remote OTA update: publish {"ota": true} to the node's
+    command topic. The gateway queues it and forwards it on the node's
+    next reading (within 5 min)."""
+    try:
+        mqtt_publish.single(
+            f"homeclimate/cmd/{node_id}", '{"ota": true}',
+            hostname=MQTT_HOST, port=MQTT_PORT,
+        )
+        return jsonify({"ok": True, "node_id": node_id})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=config.get("dashboard", {}).get("port", 5000))
