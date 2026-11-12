@@ -1,5 +1,6 @@
 #include "config.h"
 #include <Preferences.h>
+#include "portal.h"
 
 static const char *NAMESPACE = "climate";
 static const char *KEYS[] = {"wifi_ssid", "wifi_pass", "gw_mac", "node_id", "node_name"};
@@ -16,68 +17,29 @@ static bool allKeysPresent(Preferences &prefs)
     return true;
 }
 
-// One-time setup over USB serial. Blocks until all five keys are stored,
-// then reboots into normal operation.
-static void provision(Preferences &prefs)
+void saveConfig(const NodeConfig &cfg)
 {
-    Serial.println("NVS empty — provisioning mode.");
-    Serial.println("Send one key=value line per key, then 'done':");
-    Serial.println("  wifi_ssid, wifi_pass, gw_mac, node_id, node_name");
-    Serial.println("Example: wifi_ssid=MyWiFi");
+    Preferences prefs;
+    prefs.begin(NAMESPACE, false); // false = read/write
+    prefs.putString("wifi_ssid", cfg.wifi_ssid);
+    prefs.putString("wifi_pass", cfg.wifi_pass);
+    prefs.putString("gw_mac", cfg.gw_mac);
+    prefs.putString("node_id", cfg.node_id);
+    prefs.putString("node_name", cfg.node_name);
+    prefs.end();
+}
 
-    while (true)
-    {
-        while (!Serial.available())
-            delay(10);
-        String line = Serial.readStringUntil('\n');
-        line.trim();
-        if (line.length() == 0)
-            continue;
-
-        if (line == "done")
-        {
-            if (allKeysPresent(prefs))
-            {
-                Serial.println("All keys stored - rebooting...");
-                Serial.flush();
-                ESP.restart();
-            }
-            Serial.println("Still missing keys - keep sending key=value lines, then 'done'.");
-            continue;
-        }
-
-        int eq = line.indexOf('=');
-        if (eq <= 0)
-        {
-            Serial.println("Bad line - use key=value");
-            continue;
-        }
-        String key = line.substring(0, eq);
-        String value = line.substring(eq + 1);
-        key.trim();
-        value.trim();
-
-        bool known = false;
-        for (int i = 0; i < NUM_KEYS; i++)
-        {
-            if (key == KEYS[i])
-            {
-                prefs.putString(KEYS[i], value);
-                if (key == "wifi_pass")
-                {
-                    Serial.println("wifi_pass stored (not shown)");
-                }
-                else
-                {
-                    Serial.printf("%s = %s\n", key.c_str(), value.c_str());
-                }
-                known = true;
-                break;
-            }
-        }
-        if (!known)
-            Serial.println("Unknown key — ignored.");
-    }
+NodeConfig readStoredConfig()
+{
+    Preferences prefs;
+    prefs.begin(NAMESPACE, true); // true = read-only
+    NodeConfig cfg;
+    cfg.wifi_ssid = prefs.getString("wifi_ssid", "");
+    cfg.gw_mac = prefs.getString("gw_mac", "");
+    cfg.node_id = prefs.getString("node_id", "");
+    cfg.node_name = prefs.getString("node_name", "");
+    prefs.end();
+    return cfg;
 }
 
 NodeConfig loadConfig()
@@ -87,7 +49,8 @@ NodeConfig loadConfig()
 
     if (!allKeysPresent(prefs))
     {
-        provision(prefs); // never returns — reboots when done
+        prefs.end();
+        runProvisioningPortal(); // never returns — reboots when done
     }
 
     NodeConfig cfg;
