@@ -7,7 +7,7 @@
 #define PORTAL_AP_SSID "ClimateNode-Setup"
 #define PORTAL_AP_PASSWORD "climate-setup" // WPA2, min 8 chars; fixed default for now
 #define DNS_PORT 53
-#define SETUP_BOOT_PIN 0 // NodeMCU BOOT button; also a strapping pin — never hold across reset
+#define SETUP_BUTTON_PIN 0 // NodeMCU BOOT button; also a strapping pin — never hold across reset
 #define LONG_PRESS_MS 3000
 
 static DNSServer dnsServer;
@@ -27,15 +27,15 @@ static bool validMac(const String &s)
 
 bool longPressDetected()
 {
-    pinMode(SETUP_BOOT_PIN, INPUT_PULLUP);
-    if (digitalRead(SETUP_BOOT_PIN) == HIGH)
+    pinMode(SETUP_BUTTON_PIN, INPUT_PULLUP);
+    if (digitalRead(SETUP_BUTTON_PIN) == HIGH)
         return false; // not pressed — no delay to the normal cycle
     // Button is down — confirm it's a deliberate 3 s hold, not a bump.
     Serial.println("BOOT held — confirming 3 s long press...");
     unsigned long start = millis();
     while (millis() - start < LONG_PRESS_MS)
     {
-        if (digitalRead(SETUP_BOOT_PIN) == HIGH)
+        if (digitalRead(SETUP_BUTTON_PIN) == HIGH)
         {
             Serial.println("BOOT released early — continuing normally");
             return false;
