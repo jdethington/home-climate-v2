@@ -11,11 +11,14 @@ homeclimate/cmd/<node-id> via paho's publish.single — no persistent MQTT
 client here; the node answers ota_ready on homeclimate/status/<node-id>
 and the dashboard shows the upload link from node_status. Listens on all
 interfaces so the page is reachable on the LAN via mDNS (http://climatepi.local:5000).
+Firmware hosting (issue #19): /firmware/<file> serves the published node binary + version manifest from pi/firmware/.
 """
 
+import hashlib
+import os
 import sqlite3
 import yaml
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_from_directory, abort
 
 from database import Database
 
@@ -31,6 +34,9 @@ DB_PATH = config["database"]["path"]
 
 MQTT_HOST = config["mqtt"]["host"]
 MQTT_PORT = config["mqtt"]["port"]
+
+FIRMWARE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            config.get("firmware", {}).get("dir", "firmware"))
 
 @app.route("/")
 def index():
@@ -104,6 +110,21 @@ def update_node(node_id):
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 502
 
+@app.route("/firmware/<path:filename>")
+def firmware_file(filename):
+    """Serve a firmware file (binary or manifest) from the firmware dir.
+
+    For .bin files, also sends an X-MD5 header — the node's HTTPUpdate
+    library verifies the download against it before flashing.
+    """
+    path = os.path.join(FIRMWARE_DIR, filename)
+    if not os.path.isfile(path):
+        abort(404)
+    response = send_from_directory(FIRMWARE_DIR, filename)
+    if filename.endswith(".bin"):
+        with open(path, "rb") as f:
+            response.headers["X-MD5"] = hashlib.md5(f.read()).hexdigest()
+    return response
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=config.get("dashboard", {}).get("port", 5000))

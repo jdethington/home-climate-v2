@@ -18,6 +18,10 @@ database:
 dashboard:
   port: 5000
 
+firmware:
+  dir: "firmware"
+  base_url: "http://192.168.0.104:5000/firmware"
+
 ntfy:
   enabled: true
   quiet_start: 22
