@@ -18,10 +18,10 @@ import hashlib
 import os
 import sqlite3
 import yaml
+import json
+
 from flask import Flask, render_template, jsonify, request, send_from_directory, abort
-
 from database import Database
-
 from paho.mqtt import publish as mqtt_publish
 
 def load_config(path="config.yaml"):
@@ -30,6 +30,20 @@ def load_config(path="config.yaml"):
 
 app = Flask(__name__)
 config = load_config()
+
+def load_manifest():
+    """Read the published firmware manifest (pi/firmware/version.json).
+
+    Returns the manifest dict (version, file, md5) or None if no
+    firmware has been published yet.
+    """
+    path = os.path.join(FIRMWARE_DIR, "version.json")
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
 DB_PATH = config["database"]["path"]
 
 MQTT_HOST = config["mqtt"]["host"]
@@ -70,8 +84,10 @@ def api_status():
         verdict, reasons = db.get_latest_recommendation()
         alerts = db.get_nws_alerts()
         node_status = db.get_node_status()
+        manifest = load_manifest()
+        latest_fw = manifest["version"] if manifest else None
         return jsonify(
-            {"recommendation": verdict, "reasons": reasons, "sensors": sensors, "alerts": alerts, "node_status": node_status}
+            {"recommendation": verdict, "reasons": reasons, "sensors": sensors, "alerts": alerts, "node_status": node_status, "latest_fw_version": latest_fw}
         )
     finally:
         db.close()
@@ -98,15 +114,22 @@ def history():
 
 @app.route("/api/update/<node_id>", methods=["POST"])
 def update_node(node_id):
-    """Trigger a remote OTA update: publish {"ota": true} to the node's
-    command topic. The gateway queues it and forwards it on the node's
-    next reading (within 5 min)."""
+    """Trigger a version-checked OTA update: publish {"ota": true, "url": ...}
+    to the node's command topic. The gateway queues it and forwards it on
+    the node's next reading (within 5 min); the node downloads the firmware
+    from the URL itself. 503 if no firmware has been published yet."""
+    manifest = load_manifest()
+    if manifest is None:
+        return jsonify({"ok": False, "error": "no firmware published"}), 503
+    base_url = config.get("firmware", {}).get("base_url", "").rstrip("/")
+    url = f"{base_url}/{manifest['file']}"
+    payload = json.dumps({"ota": True, "url": url})
     try:
         mqtt_publish.single(
-            f"homeclimate/cmd/{node_id}", '{"ota": true}',
+            f"homeclimate/cmd/{node_id}", payload,
             hostname=MQTT_HOST, port=MQTT_PORT,
         )
-        return jsonify({"ok": True, "node_id": node_id})
+        return jsonify({"ok": True, "node_id": nodeId, "version": manifest["version"]})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 502
 
