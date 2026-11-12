@@ -56,7 +56,7 @@ static void learnMac(const char *nodeId, const uint8_t *mac)
 struct PendingCmd
 {
     char node_id[16];
-    char payload[64];
+    char payload[128];
     unsigned long created_ms;
     bool used;
 };
