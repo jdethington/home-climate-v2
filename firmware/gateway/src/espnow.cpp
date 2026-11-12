@@ -30,12 +30,31 @@ static NodeEntry *findNode(const char *nodeId)
     return nullptr;
 }
 
+static void clearPending(const char *nodeId);
 // Remember which MAC belongs to which node_id, from the sender address
 // of each received packet. The payload carries no MAC, so this table is
 // how downlink commands find their node.
 static void learnMac(const char *nodeId, const uint8_t *mac)
 {
+
     NodeEntry *e = findNode(nodeId);
+    if (e == nullptr)
+    {
+        // Same device, new name? Match by MAC first.
+        for (int i = 0; i < MAX_NODES; i++)
+        {
+            if (nodes[i].used && memcmp(nodes[i].mac, mac, 6) == 0)
+            {
+                e = &nodes[i];
+                break;
+            }
+        }
+        // The node was renamed: any command still queued for its old id
+        // is done (the rename itself) or undeliverable — clear it, or
+        // it re-fires if the node ever returns to that id.
+        if (e != nullptr && strcmp(e->node_id, nodeId) != 0)
+            clearPending(e->node_id);
+    }
     if (e == nullptr)
     {
         for (int i = 0; i < MAX_NODES; i++)
@@ -253,7 +272,7 @@ static void beaconLoop()
     static const uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     char buf[128];
     snprintf(buf, sizeof(buf), "{\"type\":\"beacon\",\"gw_mac\":\"%s\",\"channel\":%d}",
-             WiFi.macAddress().c_str(), WiFi.channel());
+             WiFi.macAddress().c_str(), (int)WiFi.channel());
     // Broadcast has no MAC-ACK — ESP_OK just means it was queued.
     if (esp_now_send(broadcastMac, (uint8_t *)buf, strlen(buf)) != ESP_OK)
         Serial.println("BEACON: send failed");
