@@ -21,3 +21,8 @@ secrets.yaml
 # OS
 .DS_Store
 Thumbs.db
+
+# Firmware binaries + live manifest (published to the Pi by hand; the
+# .example template above is tracked, the live files are not)
+pi/firmware/*.bin
+pi/firmware/version.json

@@ -1,9 +1,10 @@
 #pragma once
 #include "config.h"
 
-// OTA mode (issue #18): join home Wi-Fi, announce ota_ready to the
-// gateway (with our IP, so the dashboard can link to the upload page),
-// then serve ElegantOTA for 10 minutes. Never returns — reboots on
-// timeout, on Wi-Fi failure, or after a successful upload (ElegantOTA
-// auto-reboots). Called from setup() instead of sleeping.
-void runOtaMode(const NodeConfig &cfg);
+// OTA mode (issue #19): join home Wi-Fi, announce ota_ready to the
+// gateway (the gateway clears the queued command on it, so it won't
+// re-fire after we reboot), then download the firmware from url with
+// HTTPUpdate and reboot into it. Never returns — reboots on Wi-Fi
+// failure, on download failure, or after a successful update
+// (HTTPUpdate auto-reboots). Called from setup() instead of sleeping.
+void runOtaMode(const NodeConfig &cfg, const char *url);

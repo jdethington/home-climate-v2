@@ -5,20 +5,23 @@ recommendation + reasons come from latest_recommendation, written every
 cycle by the logging service (CLOSED with no reasons before the first
 reading). No ordering worry — the dashboard's own Database() call runs the migration,
 so the table exists whichever service starts first.
-History graphs come from the readings table. The Update firmware button
-(issue #18) publishes a one-shot {"ota": true} command to
+History graphs come from the readings table. 
+Version-checked OTA (issue #19): the dashboard compares each node's fw_version against the
+published manifest and shows an "Update to <version>" button when one is
+available; one click publishes {"ota": true, "url": ...} to
 homeclimate/cmd/<node-id> via paho's publish.single — no persistent MQTT
-client here; the node answers ota_ready on homeclimate/status/<node-id>
-and the dashboard shows the upload link from node_status. Listens on all
-interfaces so the page is reachable on the LAN via mDNS (http://climatepi.local:5000).
+client here; the node downloads the firmware from the URL itself and
+answers ota_ready on homeclimate/status/<node-id> while it updates.
 """
 
+import hashlib
+import os
 import sqlite3
 import yaml
-from flask import Flask, render_template, jsonify, request
+import json
 
+from flask import Flask, render_template, jsonify, request, send_from_directory, abort
 from database import Database
-
 from paho.mqtt import publish as mqtt_publish
 
 def load_config(path="config.yaml"):
@@ -27,10 +30,27 @@ def load_config(path="config.yaml"):
 
 app = Flask(__name__)
 config = load_config()
+
+def load_manifest():
+    """Read the published firmware manifest (pi/firmware/version.json).
+
+    Returns the manifest dict (version, file, md5) or None if no
+    firmware has been published yet.
+    """
+    path = os.path.join(FIRMWARE_DIR, "version.json")
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
 DB_PATH = config["database"]["path"]
 
 MQTT_HOST = config["mqtt"]["host"]
 MQTT_PORT = config["mqtt"]["port"]
+
+FIRMWARE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            config.get("firmware", {}).get("dir", "firmware"))
 
 @app.route("/")
 def index():
@@ -64,8 +84,10 @@ def api_status():
         verdict, reasons = db.get_latest_recommendation()
         alerts = db.get_nws_alerts()
         node_status = db.get_node_status()
+        manifest = load_manifest()
+        latest_fw = manifest["version"] if manifest else None
         return jsonify(
-            {"recommendation": verdict, "reasons": reasons, "sensors": sensors, "alerts": alerts, "node_status": node_status}
+            {"recommendation": verdict, "reasons": reasons, "sensors": sensors, "alerts": alerts, "node_status": node_status, "latest_fw_version": latest_fw}
         )
     finally:
         db.close()
@@ -92,18 +114,40 @@ def history():
 
 @app.route("/api/update/<node_id>", methods=["POST"])
 def update_node(node_id):
-    """Trigger a remote OTA update: publish {"ota": true} to the node's
-    command topic. The gateway queues it and forwards it on the node's
-    next reading (within 5 min)."""
+    """Trigger a version-checked OTA update: publish {"ota": true, "url": ...}
+    to the node's command topic. The gateway queues it and forwards it on
+    the node's next reading (within 5 min); the node downloads the firmware
+    from the URL itself. 503 if no firmware has been published yet."""
+    manifest = load_manifest()
+    if manifest is None:
+        return jsonify({"ok": False, "error": "no firmware published"}), 503
+    base_url = config.get("firmware", {}).get("base_url", "").rstrip("/")
+    url = f"{base_url}/{manifest['file']}"
+    payload = json.dumps({"ota": True, "url": url})
     try:
         mqtt_publish.single(
-            f"homeclimate/cmd/{node_id}", '{"ota": true}',
+            f"homeclimate/cmd/{node_id}", payload,
             hostname=MQTT_HOST, port=MQTT_PORT,
         )
-        return jsonify({"ok": True, "node_id": node_id})
+        return jsonify({"ok": True, "node_id": node_id, "version": manifest["version"]})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 502
 
+@app.route("/firmware/<path:filename>")
+def firmware_file(filename):
+    """Serve a firmware file (binary or manifest) from the firmware dir.
+
+    For .bin files, also sends an X-MD5 header — the node's HTTPUpdate
+    library verifies the download against it before flashing.
+    """
+    path = os.path.join(FIRMWARE_DIR, filename)
+    if not os.path.isfile(path):
+        abort(404)
+    response = send_from_directory(FIRMWARE_DIR, filename)
+    if filename.endswith(".bin"):
+        with open(path, "rb") as f:
+            response.headers["X-MD5"] = hashlib.md5(f.read()).hexdigest()
+    return response
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=config.get("dashboard", {}).get("port", 5000))
