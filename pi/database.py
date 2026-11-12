@@ -1,5 +1,5 @@
 """SQLite storage (issue #11): readings, events, latest_recommendation,
-nws_alerts, node_status. WAL mode.
+nws_alerts, node_status, paired_devices. WAL mode.
 
 The database file itself is gitignored (*.db in .gitignore) — only the
 schema (this file) lives in the repo. Timestamps are stamped here at
@@ -73,6 +73,18 @@ MIGRATIONS = {
             status TEXT NOT NULL,
             ip TEXT,
             ts TEXT NOT NULL
+        )""",
+    ],
+
+    5: [
+        # Paired devices awaiting a name (issue #21): one row per device
+        # MAC. node_id is empty or provisional ("node-XXXX") until the
+        # user names it from the dashboard; the row is deleted once the
+        # rename is issued. A re-pair re-creates it.
+        """CREATE TABLE IF NOT EXISTS paired_devices (
+            mac TEXT PRIMARY KEY,
+            node_id TEXT NOT NULL,
+            first_seen TEXT NOT NULL
         )""",
     ],
 }
@@ -183,6 +195,31 @@ class Database:
             {"node_id": r[0], "status": r[1], "ip": r[2], "ts": r[3]}
             for r in rows
         ]
+    
+    def record_pairing(self, mac, node_id):
+        self.conn.execute(
+            """INSERT INTO paired_devices (mac, node_id, first_seen)
+            VALUES (?, ?, ?)
+            ON CONFLICT(mac) DO UPDATE SET node_id = excluded.node_id""",
+            (mac, node_id, _now_iso()),
+        )
+        self.conn.commit()
+
+    def get_unnamed_devices(self):
+        # Un-named = empty node_id, or a provisional "node-XXXX" id
+        # (generated from the MAC — module 4). Named nodes never appear.
+        rows = self.conn.execute(
+            """SELECT mac, node_id, first_seen FROM paired_devices
+            WHERE node_id = '' OR node_id LIKE 'node-%' ORDER BY first_seen"""
+        ).fetchall()
+        return [
+            {"mac": r[0], "node_id": r[1], "first_seen": r[2]}
+            for r in rows
+        ]
+
+    def mark_device_named(self, mac):
+        self.conn.execute("DELETE FROM paired_devices WHERE mac = ?", (mac,))
+        self.conn.commit()
 
     def clear_node_status(self, node_id):
         # A node sending readings is definitively out of OTA mode.
