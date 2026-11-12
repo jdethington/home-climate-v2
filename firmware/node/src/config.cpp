@@ -47,7 +47,7 @@ NodeConfig loadConfig()
     Preferences prefs;
     prefs.begin(NAMESPACE, false); // false = read/write
 
-    if (!allKeysPresent(prefs))
+    if (!allKeysPresent(prefs) || longPressDetected())
     {
         prefs.end();
         runProvisioningPortal(); // never returns — reboots when done

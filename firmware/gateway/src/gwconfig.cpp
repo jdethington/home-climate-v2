@@ -43,7 +43,7 @@ GatewayConfig loadGatewayConfig()
 {
     Preferences prefs;
     prefs.begin(NAMESPACE, false);
-    if (!allKeysPresent(prefs))
+    if (!allKeysPresent(prefs) || longPressDetected())
     {
         prefs.end();
         runProvisioningPortal(); // never returns — reboots when done
