@@ -5,13 +5,13 @@ recommendation + reasons come from latest_recommendation, written every
 cycle by the logging service (CLOSED with no reasons before the first
 reading). No ordering worry — the dashboard's own Database() call runs the migration,
 so the table exists whichever service starts first.
-History graphs come from the readings table. The Update firmware button
-(issue #18) publishes a one-shot {"ota": true} command to
+History graphs come from the readings table. 
+Version-checked OTA (issue #19): the dashboard compares each node's fw_version against the
+published manifest and shows an "Update to <version>" button when one is
+available; one click publishes {"ota": true, "url": ...} to
 homeclimate/cmd/<node-id> via paho's publish.single — no persistent MQTT
-client here; the node answers ota_ready on homeclimate/status/<node-id>
-and the dashboard shows the upload link from node_status. Listens on all
-interfaces so the page is reachable on the LAN via mDNS (http://climatepi.local:5000).
-Firmware hosting (issue #19): /firmware/<file> serves the published node binary + version manifest from pi/firmware/.
+client here; the node downloads the firmware from the URL itself and
+answers ota_ready on homeclimate/status/<node-id> while it updates.
 """
 
 import hashlib
