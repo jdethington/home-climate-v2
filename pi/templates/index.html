@@ -125,7 +125,7 @@
             const cards = document.getElementById("cards");
             cards.innerHTML = "";
             sensors.forEach((s) => {
-                const ota = freshOtaStatus(s.node_id, statuses);
+                const ota = freshOtaStatus(s.node_id, nodeStatus);
                 const pending = pendingUpdates.has(s.node_id);
                 let otaHtml;
                 if (ota) {

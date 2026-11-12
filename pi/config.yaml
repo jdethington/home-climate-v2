@@ -4,6 +4,7 @@ mqtt:
   port: 1883
   topics:
     - "homeclimate/sensor/#"
+    - "homeclimate/status/#"
 
 recommendation:
   open_margin_c: 2.0
@@ -26,7 +27,3 @@ nws:
   latitude: 33.3528
   longitude: -111.7890
   poll_interval_minutes: 15
-
-topics:
-  - "homeclimate/sensor/#"
-  - "homeclimate/status/#"
