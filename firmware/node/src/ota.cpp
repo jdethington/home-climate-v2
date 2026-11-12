@@ -1,13 +1,11 @@
 #include "ota.h"
 #include <WiFi.h>
-#include <WebServer.h>
-#include <ElegantOTA.h>
+#include <HTTPUpdate.h>
 #include "transport.h" // sendStatus()
 
-#define OTA_TIMEOUT_MS (10UL * 60UL * 1000UL) // 10 minutes
 #define WIFI_CONNECT_TIMEOUT_MS 15000
 
-void runOtaMode(const NodeConfig &cfg)
+void runOtaMode(const NodeConfig &cfg, const char *url)
 {
     Serial.println("OTA mode: joining Wi-Fi...");
     WiFi.mode(WIFI_STA);
@@ -26,7 +24,7 @@ void runOtaMode(const NodeConfig &cfg)
 
     // Announce readiness via ESP-NOW (still alive on channel 6 — the AP is
     // on the same channel, so joining Wi-Fi didn't move the radio). The
-    // gateway forwards this to homeclimate/status/<node-id> for the dashboard.
+    // gateway clears the queued command on ota_ready.
     char buf[128];
     snprintf(buf, sizeof(buf), "{\"node_id\":\"%s\",\"status\":\"ota_ready\",\"ip\":\"%s\"}",
              cfg.node_id.c_str(), ip.c_str());
@@ -35,28 +33,22 @@ void runOtaMode(const NodeConfig &cfg)
     else
         Serial.println("OTA mode: ota_ready send failed (continuing anyway)");
 
-    WebServer server(80);
-    // ElegantOTA serves its page at /update, not / — redirect the bare IP
-    // so http://<node-ip>/ lands on the upload page.
-    server.on("/", [&server]()
-              {
-    server.sendHeader("Location", "/update");
-    server.send(302, "text/plain", ""); });
-    ElegantOTA.begin(&server);
-    server.begin();
-    Serial.printf("OTA mode: ElegantOTA ready at http://%s (10 min timeout)\n", ip.c_str());
-
-    // Serve uploads until the timeout. A reboot mid-upload is safe: OTA
-    // writes to the inactive slot, and the bootloader only switches slots
-    // after a complete, verified write — the old firmware keeps running.
-    unsigned long otaStart = millis();
-    while (millis() - otaStart < OTA_TIMEOUT_MS)
+    // Download the firmware from the URL and flash it. HTTPUpdate verifies
+    // the image (including the server's X-MD5 header, when sent) and
+    // reboots into the new firmware on success — this never returns then.
+    // A failed download is safe: the old firmware keeps running.
+    Serial.printf("OTA mode: downloading firmware from %s\n", url);
+    WiFiClient client;
+    t_httpUpdate_return ret = httpUpdate.update(client, url);
+    if (ret == HTTP_UPDATE_OK)
     {
-        server.handleClient();
-        ElegantOTA.loop();
-        delay(10);
+        // unreachable in practice — update() reboots on success
+        Serial.println("OTA mode: update OK, rebooting");
     }
-    Serial.println("OTA mode: timeout, rebooting to normal cycle");
+    else
+    {
+        Serial.printf("OTA mode: update failed (%d): %s\n", (int)ret, httpUpdate.getLastErrorString().c_str());
+    }
     delay(100);
     ESP.restart();
 }

@@ -58,7 +58,7 @@ static bool sendOnce(const uint8_t *peer, const SensorPayload &pkt)
     return sendDone && sendOk;
 }
 
-bool sendPayload(const SensorPayload &pkt, const String &gwMacStr)
+bool sendPayload(const SensorPayload &pkt, const String &gwMacStr, char *urlOut, size_t urlOutLen)
 {
     uint8_t gwMac[6];
     if (!parseMac(gwMacStr, gwMac))
@@ -108,11 +108,32 @@ bool sendPayload(const SensorPayload &pkt, const String &gwMacStr)
         delay(10);
     if (!downlinkGot)
         return false;
-    // The only command so far: {"ota": true}. Substring check is enough for
-    // one fixed-shape command; if commands grow, switch to ArduinoJson.
+    // OTA command: {"ota": true, "url": "http://..."}. Substring checks
+    // are enough for this fixed shape; if commands grow, switch to
+    // ArduinoJson.
     if (strstr(downlinkBuf, "\"ota\"") != nullptr && strstr(downlinkBuf, "true") != nullptr)
     {
         Serial.println("Downlink: OTA command received");
+        urlOut[0] = '\0';
+        // Extract "url": "..." if present.
+        const char *u = strstr(downlinkBuf, "\"url\"");
+        if (u != nullptr)
+        {
+            u = strchr(u + 5, '"'); // opening quote of the value
+            if (u != nullptr)
+            {
+                const char *end = strchr(u + 1, '"'); // closing quote
+                if (end != nullptr)
+                {
+                    size_t n = (size_t)(end - (u + 1));
+                    if (n >= urlOutLen)
+                        n = urlOutLen - 1;
+                    memcpy(urlOut, u + 1, n);
+                    urlOut[n] = '\0';
+                }
+            }
+        }
+        Serial.printf("Downlink: firmware URL: %s\n", urlOut);
         return true;
     }
     Serial.printf("Downlink: unknown command ignored: %s\n", downlinkBuf);

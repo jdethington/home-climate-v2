@@ -7,7 +7,7 @@
 #include "sensing.h"   // readSensors() - DHT auto-detect
 #include "transport.h" // sendPayload() - ESP-NOW unicast + downlink listen
 #include "power.h"     // readBattery(), goToSleep()
-#include "ota.h"       // runOtaMode() - join Wi-Fi, announce ota_ready, serve ElegantOTA
+#include "ota.h"       // runOtaMode() - join Wi-Fi, announce ota_ready, download firmware
 
 #define SLEEP_SECONDS 300 // 5 minutes
 #define DHT_PIN 4         // same pon as v1 hub DHT - sensing code
@@ -47,13 +47,17 @@ void setup()
 
     // 5. Send — unicast to gw_mac, 2–3 retries on no MAC-ACK, then sleep regardless;
     //    stays awake 2 s after for a downlink command. Wi-Fi/ESP-NOW init lives in here.
-    //    Returns true if an OTA command arrived in the listen window.
-    bool otaRequested = sendPayload(pkt, cfg.gw_mac);
+    //    Returns true if an OTA command arrived in the listen window; the
+    //    command's firmware URL (if any) lands in otaUrl.
+    char otaUrl[96] = {0};
+    bool otaRequested = sendPayload(pkt, cfg.gw_mac, otaUrl, sizeof(otaUrl));
 
-    // 6. OTA mode instead of sleep if the gateway asked for it — runOtaMode
-    //    never returns (reboots on timeout, Wi-Fi failure, or after upload).
-    if (otaRequested)
-        runOtaMode(cfg);
+    // 6. OTA mode instead of sleep if the gateway asked for it AND gave a
+    //    URL — runOtaMode never returns (reboots after the download, or on
+    //    Wi-Fi/download failure). A URL-less OTA command is ignored (the
+    //    node just sleeps; the gateway re-forwards until the 15-min expiry).
+    if (otaRequested && otaUrl[0] != '\0')
+        runOtaMode(cfg, otaUrl);
 
     // 7. Deep sleep — the chip restarts from the top of setup() on wake
     goToSleep(SLEEP_SECONDS);

@@ -2,7 +2,7 @@
 
 #pragma once
 
-#define FW_VERSION "1.1.2" // bump on every release
+#define FW_VERSION "1.1.3" // bump on every release
 
 struct SensorPayload
 {
