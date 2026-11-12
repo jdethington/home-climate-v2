@@ -1,4 +1,5 @@
-"""SQLite storage (issue #11): readings + events, WAL mode.
+"""SQLite storage (issue #11): readings, events, latest_recommendation,
+nws_alerts, node_status. WAL mode.
 
 The database file itself is gitignored (*.db in .gitignore) — only the
 schema (this file) lives in the repo. Timestamps are stamped here at
@@ -59,6 +60,19 @@ MIGRATIONS = {
             onset TEXT,
             expires TEXT,
             fetched_at TEXT NOT NULL
+        )""",
+    ],
+
+    4: [
+        # Latest status per node (issue #18): ota_ready + IP for the
+        # dashboard's upload link. One row per node, replaced on every
+        # status message. ts shows staleness — an ota_ready older than
+        # the node's 10-min OTA window is dead.
+        """CREATE TABLE IF NOT EXISTS node_status (
+            node_id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            ip TEXT,
+            ts TEXT NOT NULL
         )""",
     ],
 }
@@ -152,6 +166,30 @@ class Database:
             {"event": r[0], "headline": r[1], "severity": r[2], "onset": r[3], "expires": r[4]}
             for r in rows
         ]
+
+    def set_node_status(self, node_id, status, ip):
+        self.conn.execute(
+            """INSERT OR REPLACE INTO node_status
+            (node_id, status, ip, ts) VALUES (?, ?, ?, ?)""",
+            (node_id, status, ip, _now_iso()),
+        )
+        self.conn.commit()
+
+    def get_node_status(self):
+        rows = self.conn.execute(
+            "SELECT node_id, status, ip, ts FROM node_status ORDER BY node_id"
+        ).fetchall()
+        return [
+            {"node_id": r[0], "status": r[1], "ip": r[2], "ts": r[3]}
+            for r in rows
+        ]
+
+    def clear_node_status(self, node_id):
+        # A node sending readings is definitively out of OTA mode.
+        self.conn.execute(
+            "DELETE FROM node_status WHERE node_id = ?", (node_id,)
+        )
+        self.conn.commit()
 
     def close(self):
         self.conn.close()

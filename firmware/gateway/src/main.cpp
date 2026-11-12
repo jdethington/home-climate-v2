@@ -23,7 +23,7 @@ void setup()
         Serial.print(".");
     }
     Serial.println();
-    Serial.printf("Wi-Fi connected: %s, channel %d, IP %s\n",
+    Serial.printf("Wi-Fi connected: %s, channel %ld, IP %s\n",
                   WiFi.SSID().c_str(), WiFi.channel(),
                   WiFi.localIP().toString().c_str());
 

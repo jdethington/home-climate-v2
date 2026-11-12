@@ -14,14 +14,15 @@ static unsigned long lastReconnectAttempt = 0;
 
 static void onMqttMessage(char *topic, byte *payload, unsigned int length)
 {
-    // Topic: homeclimate/cmd/<node-id> — forward the raw payload to the node
+    // Topic: homeclimate/cmd/<node-id> — queue it; the node is asleep most
+    // of the time, so the gateway forwards it on the node's next reading.
     String t = String(topic);
     const String prefix = "homeclimate/cmd/";
     if (!t.startsWith(prefix))
         return;
     String nodeId = t.substring(prefix.length());
     Serial.printf("CMD for %s: %u bytes\n", nodeId.c_str(), length);
-    espnowSend(nodeId, payload, length);
+    queueCommand(nodeId, payload, length);
 }
 
 static bool reconnect()

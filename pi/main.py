@@ -2,7 +2,10 @@
 
 Subscribes to homeclimate/sensor/#, stores every reading, recomputes
 the recommendation each cycle, publishes homeclimate/recommendation with a reasons array,
-and logs OPEN/CLOSED flips to the events table. Runs as a systemd
+and logs OPEN/CLOSED flips to the events table. Also subscribes to
+homeclimate/status/# (issue #18) and stores each node's latest status
+(ota_ready + IP) in node_status for the dashboard — status messages are
+not readings and never touch the readings table. Runs as a systemd
 service (pi/homeclimate.service).
 """
 
@@ -33,6 +36,12 @@ def on_connect(client, userdata, flags, reason_code, properties=None):
         print(f"Subscribed to topic: {topic}")
 
 def on_message(client, userdata, msg):
+    # Status messages (homeclimate/status/#) are not readings — route them
+    # before the sensor path, or they'd land as NULL rows in readings.
+    if msg.topic.startswith("homeclimate/status/"):
+        handle_status(userdata, msg)
+        return
+
     try:
         payload = json.loads(msg.payload.decode())
     except json.JSONDecodeError:
@@ -50,6 +59,7 @@ def on_message(client, userdata, msg):
         payload.get("batt_v"),
         payload.get("fw_version"),
     )
+    userdata["db"].clear_node_status(node_id)
     userdata["recommender"].update(
         node_id, payload.get("temp_c"), payload.get("humidity")
     )
@@ -129,6 +139,21 @@ def nws_poller(db_path, client, ntfy_cfg, nws_cfg, stop_event):
             stop_event.wait(interval)
     finally:
         db.close()
+
+def handle_status(userdata, msg):
+    """Node status message (issue #18): {"node_id": ..., "status": "ota_ready",
+    "ip": ...}. Stored in node_status for the dashboard; NOT a reading."""
+    try:
+        payload = json.loads(msg.payload.decode())
+    except json.JSONDecodeError:
+        print(f"Ignoring bad status JSON on {msg.topic}")
+        return
+    node_id = payload.get("node_id")
+    if not node_id:
+        print(f"Ignoring status without node_id on {msg.topic}")
+        return
+    userdata["db"].set_node_status(node_id, payload.get("status", ""), payload.get("ip"))
+    print(f"{datetime.now().isoformat(timespec='seconds')} STATUS {node_id}: {payload.get('status')} {payload.get('ip', '')}")
 
 def main():
     config = load_config()
