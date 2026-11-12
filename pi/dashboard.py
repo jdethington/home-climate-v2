@@ -129,7 +129,7 @@ def update_node(node_id):
             f"homeclimate/cmd/{node_id}", payload,
             hostname=MQTT_HOST, port=MQTT_PORT,
         )
-        return jsonify({"ok": True, "node_id": nodeId, "version": manifest["version"]})
+        return jsonify({"ok": True, "node_id": node_id, "version": manifest["version"]})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 502
 
