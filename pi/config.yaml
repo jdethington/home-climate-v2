@@ -2,10 +2,10 @@
 mqtt:
   host: "192.168.0.104"
   port: 1883
-topics:
-  - "homeclimate/sensor/#"
-  - "homeclimate/status/#"
-  - "homeclimate/pairing"
+  topics:
+    - "homeclimate/sensor/#"
+    - "homeclimate/status/#"
+    - "homeclimate/pairing"
 
 recommendation:
   open_margin_c: 2.0
