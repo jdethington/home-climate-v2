@@ -21,8 +21,12 @@ static char downlinkBuf[128];
 static void onDownlink(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {
     (void)info;
+    // Ignore gateway beacons (issue #21) — they're for pairing nodes, not
+    // for us, and they must not cut the OTA-command listen window short.
+    if (len >= 16 && data[0] == '{' && memcmp(data, "{\"type\":\"beacon\"", 16) == 0)
+        return;
     int n = len < (int)sizeof(downlinkBuf) - 1 ? len : (int)sizeof(downlinkBuf) - 1;
-    memcpy(downlinkBuf, data, n);
+    ... memcpy(downlinkBuf, data, n);
     downlinkBuf[n] = '\0';
     downlinkGot = true;
     Serial.printf("Downlink received: %d bytes\n", len);
