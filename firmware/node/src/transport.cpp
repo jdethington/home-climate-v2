@@ -3,8 +3,6 @@
 #include <esp_now.h>
 #include <esp_wifi.h>
 
-#define ESPNOW_CHANNEL 6 // must match the gateway's Wi-Fi channel (the AP's channel)
-
 // The send callback runs on the Wi-Fi task, not the main task — volatile
 // so the wait loop actually sees the change.
 static volatile bool sendDone = false;
@@ -142,6 +140,8 @@ bool sendPayload(const SensorPayload &pkt, const String &gwMacStr, char *urlOut,
 
 bool sendStatus(const String &gwMacStr, const String &json)
 {
+    esp_now_register_send_cb(onSent);
+
     uint8_t gwMac[6];
     if (!parseMac(gwMacStr, gwMac))
     {

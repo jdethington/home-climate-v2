@@ -25,25 +25,36 @@ static bool validMac(const String &s)
     return true;
 }
 
-bool longPressDetected()
+#define PRESS_WINDOW_MS 1000 // watch window at startup (doubles as serial settle)
+
+PressType detectButtonPress()
 {
     pinMode(SETUP_BUTTON_PIN, INPUT_PULLUP);
+    // Phase 1: watch for a press for up to 1 s.
+    unsigned long windowStart = millis();
+    while (millis() - windowStart < PRESS_WINDOW_MS)
+    {
+        if (digitalRead(SETUP_BUTTON_PIN) == LOW)
+            break; // pressed — time the hold
+        delay(10);
+    }
     if (digitalRead(SETUP_BUTTON_PIN) == HIGH)
-        return false; // not pressed — no delay to the normal cycle
-    // Button is down — confirm it's a deliberate 3 s hold, not a bump.
-    Serial.println("BOOT held — confirming 3 s long press...");
-    unsigned long start = millis();
-    while (millis() - start < LONG_PRESS_MS)
+        return PressType::NONE; // never pressed in the window
+    // Phase 2: time the hold from the press.
+    Serial.println("BOOT pressed — timing the hold...");
+    unsigned long pressStart = millis();
+    while (millis() - pressStart < LONG_PRESS_MS)
     {
         if (digitalRead(SETUP_BUTTON_PIN) == HIGH)
         {
-            Serial.println("BOOT released early — continuing normally");
-            return false;
+            if (millis() - pressStart < 50)
+                return PressType::NONE; // too short — bounce, not a press
+            return PressType::TAP;
         }
-        delay(50);
+        delay(10);
     }
     Serial.println("Long press detected — starting setup portal");
-    return true;
+    return PressType::LONG;
 }
 
 // True if s is non-empty and every character is a digit.

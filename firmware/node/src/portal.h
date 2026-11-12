@@ -5,6 +5,16 @@
 // Never returns — the node reboots once valid config is saved.
 void runProvisioningPortal();
 
-// True if BOOT (GPIO 0) is held down for a full 3 seconds. Returns
-// immediately (no delay to the normal cycle) when the button is up.
-bool longPressDetected();
+// What the BOOT button did during startup (issue #21): NONE (not touched),
+// TAP (pressed and released — pair), LONG (held 3 s — setup portal).
+enum class PressType
+{
+    NONE,
+    TAP,
+    LONG
+};
+
+// Watches BOOT for up to 1 s (the serial settle time — no extra delay to
+// the cycle) and classifies the press. Returns immediately when the button
+// is never touched.
+PressType detectButtonPress();

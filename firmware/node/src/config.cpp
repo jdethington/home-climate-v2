@@ -1,6 +1,7 @@
 #include "config.h"
 #include <Preferences.h>
 #include "portal.h"
+#include "pairing.h"
 
 static const char *NAMESPACE = "climate";
 static const char *KEYS[] = {"wifi_ssid", "wifi_pass", "gw_mac", "node_id", "node_name"};
@@ -47,7 +48,8 @@ NodeConfig loadConfig()
     Preferences prefs;
     prefs.begin(NAMESPACE, false); // false = read/write
 
-    if (!allKeysPresent(prefs) || longPressDetected())
+    PressType press = detectButtonPress();
+    if (!allKeysPresent(prefs) || press == PressType::LONG)
     {
         prefs.end();
         runProvisioningPortal(); // never returns — reboots when done
@@ -60,6 +62,11 @@ NodeConfig loadConfig()
     cfg.node_id = prefs.getString("node_id", "");
     cfg.node_name = prefs.getString("node_name", "");
     prefs.end();
+
+    if (press == PressType::TAP)
+    {
+        runPairingMode(cfg); // updates cfg.gw_mac on success; timeout keeps the old MAC
+    }
 
     Serial.printf("Config: node %s (%s), gateway %s, SSID %s\n",
                   cfg.node_id.c_str(), cfg.node_name.c_str(),
