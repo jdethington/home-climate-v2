@@ -1,3 +1,5 @@
+![Tests](https://github.com/jdethington/home-climate-v2/actions/workflows/tests.yml/badge.svg)
+
 # home-climate-v2
 
 Home climate monitoring, rebuilt from scratch: an ESP32 sensor network reporting
