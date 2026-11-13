@@ -23,6 +23,13 @@ void setup()
 
     // 1. Config - reads NVS; empty NVS drops into serial provisioning, then reboots
     NodeConfig cfg = loadConfig();
+    // No gateway MAC (issue #21): pairing found no beacon. Sleep and
+    // retry next cycle instead of sensing a reading that can't be sent.
+    if (cfg.gw_mac.isEmpty())
+    {
+        Serial.println("No gateway MAC — sleeping to retry pairing next cycle");
+        goToSleep(SLEEP_SECONDS);
+    }
 
     // 2. Sense — retries internally; returns NaN temp/humidity if the sensor is dead,
     //    so the Pi sees "node alive, sensor dead" instead of silence

@@ -98,8 +98,8 @@ static String formPage(const NodeConfig &cfg, const String &error)
             cfg.wifi_ssid + "\" required></label>"
                             "<label>Wi-Fi password<input type=\"password\" id=\"wifi_pass\" name=\"wifi_pass\" required></label>"
                             "<label><input type=\"checkbox\" onclick=\"document.getElementById('wifi_pass').type = this.checked ? 'text' : 'password'\"> Show password</label>"
-                            "<label>Gateway MAC<input name=\"gw_mac\" value=\"" +
-            cfg.gw_mac + "\" placeholder=\"AA:BB:CC:DD:EE:FF\" required></label>"
+                            "<label>Gateway MAC (optional — leave blank to pair automatically)<input name=\"gw_mac\" value=\"" +
+            cfg.gw_mac + "\" placeholder=\"AA:BB:CC:DD:EE:FF\"></label>"
                          "<label>Node type<select name=\"node_prefix\">";
     html += "<option value=\"indoor\"";
     html += indoorSel;
@@ -107,9 +107,9 @@ static String formPage(const NodeConfig &cfg, const String &error)
     html += "<option value=\"outdoor\"";
     html += outdoorSel;
     html += ">outdoor</option></select></label>";
-    html += "<label>Node number<input name=\"node_number\" inputmode=\"numeric\" value=\"" + number + "\" placeholder=\"1\" required></label>"
-                                                                                                      "<label>Node name / room<input name=\"node_name\" value=\"" +
-            cfg.node_name + "\" placeholder=\"Back porch\" required></label>"
+    html += "<label>Node number (optional — leave blank to name it from the dashboard)<input name=\"node_number\" inputmode=\"numeric\" value=\"" + number + "\" placeholder=\"1\"></label>"
+                                                                                                                                                             "<label>Node name / room (optional — leave blank to name it from the dashboard)<input name=\"node_name\" value=\"" +
+            cfg.node_name + "\" placeholder=\"Back porch\"></label>"
                             "<button type=\"submit\">Save &amp; reboot</button></form></body></html>";
     return html;
 }
@@ -134,21 +134,19 @@ static void handleSave()
     nodePrefix.trim();
     nodeNumber.trim();
     cfg.node_name.trim();
-    cfg.node_id = nodePrefix + nodeNumber;
+    cfg.node_id = (nodeNumber.length() > 0) ? (nodePrefix + nodeNumber) : "";
 
     String error;
     if (cfg.wifi_ssid.length() == 0)
         error = "Wi-Fi network name is required.";
     else if (cfg.wifi_pass.length() == 0)
         error = "Wi-Fi password is required.";
-    else if (!validMac(cfg.gw_mac))
+    else if (cfg.gw_mac.length() > 0 && !validMac(cfg.gw_mac))
         error = "Gateway MAC must look like AA:BB:CC:DD:EE:FF.";
     else if (nodePrefix != "indoor" && nodePrefix != "outdoor")
         error = "Node type must be indoor or outdoor.";
-    else if (!allDigits(nodeNumber))
+    else if (nodeNumber.length() > 0 && !allDigits(nodeNumber))
         error = "Node number must be digits only.";
-    else if (cfg.node_name.length() == 0)
-        error = "Node name / room is required.";
 
     if (error.length() > 0)
     {
@@ -156,7 +154,10 @@ static void handleSave()
         return;
     }
     saveConfig(cfg);
-    server.send(200, "text/html", "<!doctype html><html><body><h1>Saved — rebooting…</h1><p>Your node will join the network in a few seconds.</p></body></html>");
+    String next = cfg.gw_mac.isEmpty()
+                      ? "Your node will pair with the gateway automatically, then join the network."
+                      : "Your node will join the network in a few seconds.";
+    server.send(200, "text/html", "<!doctype html><html><body><h1>Saved — rebooting…</h1><p>" + next + "</p></body></html>");
     delay(1000); // let the response flush
     ESP.restart();
 }
