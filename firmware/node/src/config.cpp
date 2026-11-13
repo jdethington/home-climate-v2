@@ -4,8 +4,6 @@
 #include "pairing.h"
 
 static const char *NAMESPACE = "climate";
-static const char *KEYS[] = {"wifi_ssid", "wifi_pass", "gw_mac", "node_id", "node_name"};
-static const int NUM_KEYS = 5;
 
 // True once the Wi-Fi credentials are stored. Only Wi-Fi gates the
 // portal now (issue #21): a missing gateway MAC is fixed by pairing,
@@ -65,8 +63,6 @@ NodeConfig loadConfig()
     // provisional ID from the chip MAC — deterministic, so the Pi's
     // record stays valid across reboots. Held in memory only, never
     // saved to NVS: the node is genuinely un-named until renamed.
-    // (Dormant until module 5: allKeysPresent still routes a node with
-    // no node_id to the portal, so this only runs once that relaxes.)
     if (cfg.node_id.isEmpty())
     {
         uint64_t mac = ESP.getEfuseMac();

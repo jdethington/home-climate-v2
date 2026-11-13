@@ -21,7 +21,7 @@ void setup()
     delay(1000); // wait for serial to be ready
     bootCount++;
 
-    // 1. Config - reads NVS; empty NVS drops into serial provisioning, then reboots
+    // 1. Config - reads NVS; the captive portal
     NodeConfig cfg = loadConfig();
     // No gateway MAC (issue #21): pairing found no beacon. Sleep and
     // retry next cycle instead of sensing a reading that can't be sent.
