@@ -8,6 +8,7 @@
 #define RX_LED_PIN 2
 #define MAX_NODES 8
 #define CMD_EXPIRE_MS (15UL * 60UL * 1000UL) // 15 min
+#define BEACON_INTERVAL_MS 5000              // broadcast the beacon every 5 s
 
 struct NodeEntry
 {
@@ -29,12 +30,31 @@ static NodeEntry *findNode(const char *nodeId)
     return nullptr;
 }
 
+static void clearPending(const char *nodeId);
 // Remember which MAC belongs to which node_id, from the sender address
 // of each received packet. The payload carries no MAC, so this table is
 // how downlink commands find their node.
 static void learnMac(const char *nodeId, const uint8_t *mac)
 {
+
     NodeEntry *e = findNode(nodeId);
+    if (e == nullptr)
+    {
+        // Same device, new name? Match by MAC first.
+        for (int i = 0; i < MAX_NODES; i++)
+        {
+            if (nodes[i].used && memcmp(nodes[i].mac, mac, 6) == 0)
+            {
+                e = &nodes[i];
+                break;
+            }
+        }
+        // The node was renamed: any command still queued for its old id
+        // is done (the rename itself) or undeliverable — clear it, or
+        // it re-fires if the node ever returns to that id.
+        if (e != nullptr && strcmp(e->node_id, nodeId) != 0)
+            clearPending(e->node_id);
+    }
     if (e == nullptr)
     {
         for (int i = 0; i < MAX_NODES; i++)
@@ -158,9 +178,20 @@ static void onEspNowReceive(const esp_now_recv_info_t *info, const uint8_t *data
             Serial.println("ESP-NOW: status without node_id, ignored");
             return;
         }
-        learnMac(nodeId, info->src_addr);
+        if (nodeId[0] != '\0')
+            learnMac(nodeId, info->src_addr);
         digitalWrite(RX_LED_PIN, HIGH);
         rxLedOnMs = millis();
+        // Pairing announcement (issue #21) — a node that just learned our
+        // MAC. Forward to the pairing topic so the Pi can offer naming.
+        if (doc["type"] == "pair")
+        {
+            if (mqttPublish("homeclimate/pairing", String(buf)))
+                Serial.printf("PAIR %s -> homeclimate/pairing\n", nodeId);
+            else
+                Serial.println("PAIR: MQTT not connected, announcement dropped");
+            return;
+        }
         String topic = "homeclimate/status/" + String(nodeId);
         if (mqttPublish(topic, String(buf)))
             Serial.printf("STATUS %s -> %s\n", nodeId, topic.c_str());
@@ -230,6 +261,23 @@ bool espnowSend(const String &nodeId, const uint8_t *data, unsigned int length)
     return true;
 }
 
+static unsigned long lastBeaconMs = 0;
+
+static void beaconLoop()
+{
+    unsigned long now = millis();
+    if (now - lastBeaconMs < BEACON_INTERVAL_MS)
+        return;
+    lastBeaconMs = now;
+    static const uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    char buf[128];
+    snprintf(buf, sizeof(buf), "{\"type\":\"beacon\",\"gw_mac\":\"%s\",\"channel\":%d}",
+             WiFi.macAddress().c_str(), (int)WiFi.channel());
+    // Broadcast has no MAC-ACK — ESP_OK just means it was queued.
+    if (esp_now_send(broadcastMac, (uint8_t *)buf, strlen(buf)) != ESP_OK)
+        Serial.println("BEACON: send failed");
+}
+
 void espnowSetup()
 {
     pinMode(RX_LED_PIN, OUTPUT);
@@ -240,11 +288,20 @@ void espnowSetup()
         return;
     }
     esp_now_register_recv_cb(onEspNowReceive);
+    // Broadcast peer, for the pairing beacon (issue #21). ESP-NOW sends
+    // to the broadcast address need the peer added, like any other.
+    uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    esp_now_peer_info_t bcast = {};
+    memcpy(bcast.peer_addr, broadcastMac, 6);
+    bcast.channel = WiFi.channel();
+    bcast.encrypt = false;
+    esp_now_add_peer(&bcast);
     Serial.println("ESP-NOW ready");
 }
 
 void espnowLoop()
 {
+    beaconLoop();
     if (rxLedOnMs != 0 && millis() - rxLedOnMs > 150)
     {
         digitalWrite(RX_LED_PIN, LOW);

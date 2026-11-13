@@ -86,8 +86,9 @@ def api_status():
         node_status = db.get_node_status()
         manifest = load_manifest()
         latest_fw = manifest["version"] if manifest else None
+        new_devices = db.get_unnamed_devices()
         return jsonify(
-            {"recommendation": verdict, "reasons": reasons, "sensors": sensors, "alerts": alerts, "node_status": node_status, "latest_fw_version": latest_fw}
+            {"recommendation": verdict, "reasons": reasons, "sensors": sensors, "alerts": alerts, "node_status": node_status, "latest_fw_version": latest_fw, "new_devices": new_devices}
         )
     finally:
         db.close()
@@ -132,6 +133,45 @@ def update_node(node_id):
         return jsonify({"ok": True, "node_id": node_id, "version": manifest["version"]})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 502
+
+@app.route("/api/name", methods=["POST"])
+def name_device():
+    """Name a newly paired device (issue #21): publish a rename command
+    to the device's provisional node_id and drop it from the unnamed list.
+    Body: {"mac": ..., "node_id": ..., "node_name": ...}. The node applies
+    the rename on its next reading (module 4) and reboots with its new name."""
+    data = request.get_json(silent=True) or {}
+    mac = (data.get("mac") or "").strip()
+    node_id = (data.get("node_id") or "").strip()
+    node_name = (data.get("node_name") or "").strip()
+    # Validate like the portal: indoor/outdoor prefix + digits-only number.
+    ok_id = (
+        (node_id.startswith("indoor") and node_id[6:].isdigit())
+        or (node_id.startswith("outdoor") and node_id[7:].isdigit())
+    )
+    if not mac or not ok_id or not node_name:
+        return jsonify({"ok": False, "error": "mac, a valid node_id (indoor/outdoor + number), and node_name are required"}), 400
+    db = Database(DB_PATH)
+    try:
+        devices = {d["mac"]: d for d in db.get_unnamed_devices()}
+        if mac not in devices:
+            return jsonify({"ok": False, "error": "unknown device"}), 404
+        provisional_id = devices[mac]["node_id"]
+        if not provisional_id:
+            return jsonify({"ok": False, "error": "device has no provisional id to address"}), 409
+        payload = json.dumps({"rename": {"node_id": node_id, "node_name": node_name}})
+        try:
+            mqtt_publish.single(
+                f"homeclimate/cmd/{provisional_id}", payload,
+                hostname=MQTT_HOST, port=MQTT_PORT,
+            )
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 502
+        db.mark_device_named(mac)
+        return jsonify({"ok": True, "node_id": node_id})
+    finally:
+        db.close()
+
 
 @app.route("/firmware/<path:filename>")
 def firmware_file(filename):

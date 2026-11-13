@@ -36,6 +36,9 @@ def on_connect(client, userdata, flags, reason_code, properties=None):
         print(f"Subscribed to topic: {topic}")
 
 def on_message(client, userdata, msg):
+    if msg.topic == "homeclimate/pairing":
+        handle_pairing(userdata, msg)
+        return
     # Status messages (homeclimate/status/#) are not readings — route them
     # before the sensor path, or they'd land as NULL rows in readings.
     if msg.topic.startswith("homeclimate/status/"):
@@ -154,6 +157,22 @@ def handle_status(userdata, msg):
         return
     userdata["db"].set_node_status(node_id, payload.get("status", ""), payload.get("ip"))
     print(f"{datetime.now().isoformat(timespec='seconds')} STATUS {node_id}: {payload.get('status')} {payload.get('ip', '')}")
+
+def handle_pairing(userdata, msg):
+    """Pairing announcement (issue #21): {"type":"pair","node_id": ...,
+    "mac": ...}. Recorded in paired_devices; the dashboard offers naming
+    for devices whose node_id is empty or provisional. NOT a reading."""
+    try:
+        payload = json.loads(msg.payload.decode())
+    except json.JSONDecodeError:
+        print(f"Ignoring bad pairing JSON on {msg.topic}")
+        return
+    mac = payload.get("mac")
+    if not mac:
+        print(f"Ignoring pairing without mac on {msg.topic}")
+        return
+    userdata["db"].record_pairing(mac, payload.get("node_id", ""))
+    print(f"{datetime.now().isoformat(timespec='seconds')} PAIR {payload.get('node_id', '')} {mac}")
 
 def main():
     config = load_config()

@@ -2,7 +2,8 @@
 
 #pragma once
 
-#define FW_VERSION "1.1.5" // bump on every release
+#define FW_VERSION "1.1.6" // bump on every release
+#define ESPNOW_CHANNEL 6   // must match the gateway's Wi-Fi channel (the AP's channel)
 
 struct SensorPayload
 {

@@ -5,6 +5,7 @@ mqtt:
   topics:
     - "homeclimate/sensor/#"
     - "homeclimate/status/#"
+    - "homeclimate/pairing"
 
 recommendation:
   open_margin_c: 2.0

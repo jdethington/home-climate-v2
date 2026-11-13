@@ -25,25 +25,36 @@ static bool validMac(const String &s)
     return true;
 }
 
-bool longPressDetected()
+#define PRESS_WINDOW_MS 1000 // watch window at startup (doubles as serial settle)
+
+PressType detectButtonPress()
 {
     pinMode(SETUP_BUTTON_PIN, INPUT_PULLUP);
+    // Phase 1: watch for a press for up to 1 s.
+    unsigned long windowStart = millis();
+    while (millis() - windowStart < PRESS_WINDOW_MS)
+    {
+        if (digitalRead(SETUP_BUTTON_PIN) == LOW)
+            break; // pressed — time the hold
+        delay(10);
+    }
     if (digitalRead(SETUP_BUTTON_PIN) == HIGH)
-        return false; // not pressed — no delay to the normal cycle
-    // Button is down — confirm it's a deliberate 3 s hold, not a bump.
-    Serial.println("BOOT held — confirming 3 s long press...");
-    unsigned long start = millis();
-    while (millis() - start < LONG_PRESS_MS)
+        return PressType::NONE; // never pressed in the window
+    // Phase 2: time the hold from the press.
+    Serial.println("BOOT pressed — timing the hold...");
+    unsigned long pressStart = millis();
+    while (millis() - pressStart < LONG_PRESS_MS)
     {
         if (digitalRead(SETUP_BUTTON_PIN) == HIGH)
         {
-            Serial.println("BOOT released early — continuing normally");
-            return false;
+            if (millis() - pressStart < 50)
+                return PressType::NONE; // too short — bounce, not a press
+            return PressType::TAP;
         }
-        delay(50);
+        delay(10);
     }
     Serial.println("Long press detected — starting setup portal");
-    return true;
+    return PressType::LONG;
 }
 
 // True if s is non-empty and every character is a digit.
@@ -87,8 +98,8 @@ static String formPage(const NodeConfig &cfg, const String &error)
             cfg.wifi_ssid + "\" required></label>"
                             "<label>Wi-Fi password<input type=\"password\" id=\"wifi_pass\" name=\"wifi_pass\" required></label>"
                             "<label><input type=\"checkbox\" onclick=\"document.getElementById('wifi_pass').type = this.checked ? 'text' : 'password'\"> Show password</label>"
-                            "<label>Gateway MAC<input name=\"gw_mac\" value=\"" +
-            cfg.gw_mac + "\" placeholder=\"AA:BB:CC:DD:EE:FF\" required></label>"
+                            "<label>Gateway MAC (optional — leave blank to pair automatically)<input name=\"gw_mac\" value=\"" +
+            cfg.gw_mac + "\" placeholder=\"AA:BB:CC:DD:EE:FF\"></label>"
                          "<label>Node type<select name=\"node_prefix\">";
     html += "<option value=\"indoor\"";
     html += indoorSel;
@@ -96,9 +107,9 @@ static String formPage(const NodeConfig &cfg, const String &error)
     html += "<option value=\"outdoor\"";
     html += outdoorSel;
     html += ">outdoor</option></select></label>";
-    html += "<label>Node number<input name=\"node_number\" inputmode=\"numeric\" value=\"" + number + "\" placeholder=\"1\" required></label>"
-                                                                                                      "<label>Node name / room<input name=\"node_name\" value=\"" +
-            cfg.node_name + "\" placeholder=\"Back porch\" required></label>"
+    html += "<label>Node number (optional — leave blank to name it from the dashboard)<input name=\"node_number\" inputmode=\"numeric\" value=\"" + number + "\" placeholder=\"1\"></label>"
+                                                                                                                                                             "<label>Node name / room (optional — leave blank to name it from the dashboard)<input name=\"node_name\" value=\"" +
+            cfg.node_name + "\" placeholder=\"Back porch\"></label>"
                             "<button type=\"submit\">Save &amp; reboot</button></form></body></html>";
     return html;
 }
@@ -123,21 +134,19 @@ static void handleSave()
     nodePrefix.trim();
     nodeNumber.trim();
     cfg.node_name.trim();
-    cfg.node_id = nodePrefix + nodeNumber;
+    cfg.node_id = (nodeNumber.length() > 0) ? (nodePrefix + nodeNumber) : "";
 
     String error;
     if (cfg.wifi_ssid.length() == 0)
         error = "Wi-Fi network name is required.";
     else if (cfg.wifi_pass.length() == 0)
         error = "Wi-Fi password is required.";
-    else if (!validMac(cfg.gw_mac))
+    else if (cfg.gw_mac.length() > 0 && !validMac(cfg.gw_mac))
         error = "Gateway MAC must look like AA:BB:CC:DD:EE:FF.";
     else if (nodePrefix != "indoor" && nodePrefix != "outdoor")
         error = "Node type must be indoor or outdoor.";
-    else if (!allDigits(nodeNumber))
+    else if (nodeNumber.length() > 0 && !allDigits(nodeNumber))
         error = "Node number must be digits only.";
-    else if (cfg.node_name.length() == 0)
-        error = "Node name / room is required.";
 
     if (error.length() > 0)
     {
@@ -145,7 +154,10 @@ static void handleSave()
         return;
     }
     saveConfig(cfg);
-    server.send(200, "text/html", "<!doctype html><html><body><h1>Saved — rebooting…</h1><p>Your node will join the network in a few seconds.</p></body></html>");
+    String next = cfg.gw_mac.isEmpty()
+                      ? "Your node will pair with the gateway automatically, then join the network."
+                      : "Your node will join the network in a few seconds.";
+    server.send(200, "text/html", "<!doctype html><html><body><h1>Saved — rebooting…</h1><p>" + next + "</p></body></html>");
     delay(1000); // let the response flush
     ESP.restart();
 }

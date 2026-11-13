@@ -21,8 +21,15 @@ void setup()
     delay(1000); // wait for serial to be ready
     bootCount++;
 
-    // 1. Config - reads NVS; empty NVS drops into serial provisioning, then reboots
+    // 1. Config - reads NVS; the captive portal
     NodeConfig cfg = loadConfig();
+    // No gateway MAC (issue #21): pairing found no beacon. Sleep and
+    // retry next cycle instead of sensing a reading that can't be sent.
+    if (cfg.gw_mac.isEmpty())
+    {
+        Serial.println("No gateway MAC — sleeping to retry pairing next cycle");
+        goToSleep(SLEEP_SECONDS);
+    }
 
     // 2. Sense — retries internally; returns NaN temp/humidity if the sensor is dead,
     //    so the Pi sees "node alive, sensor dead" instead of silence
@@ -50,16 +57,31 @@ void setup()
     //    Returns true if an OTA command arrived in the listen window; the
     //    command's firmware URL (if any) lands in otaUrl.
     char otaUrl[96] = {0};
-    bool otaRequested = sendPayload(pkt, cfg.gw_mac, otaUrl, sizeof(otaUrl));
+    RenameCmd rename = {};
+    bool otaRequested = sendPayload(pkt, cfg.gw_mac, otaUrl, sizeof(otaUrl), &rename);
 
-    // 6. OTA mode instead of sleep if the gateway asked for it AND gave a
+    // 6. Rename (issue #21): a rename arrived in the listen window. Save
+    //    the new identity and reboot — the next cycle reports under the
+    //    new name. The gateway's queued copy expires harmlessly (it is
+    //    keyed by the old id, which the node no longer uses).
+    if (rename.present)
+    {
+        Serial.printf("Rename: %s -> %s (%s)\n", cfg.node_id.c_str(), rename.node_id, rename.node_name);
+        cfg.node_id = rename.node_id;
+        cfg.node_name = rename.node_name;
+        saveConfig(cfg);
+        delay(100); // let the serial line flush
+        ESP.restart();
+    }
+
+    // 7. OTA mode instead of sleep if the gateway asked for it AND gave a
     //    URL — runOtaMode never returns (reboots after the download, or on
     //    Wi-Fi/download failure). A URL-less OTA command is ignored (the
     //    node just sleeps; the gateway re-forwards until the 15-min expiry).
     if (otaRequested && otaUrl[0] != '\0')
         runOtaMode(cfg, otaUrl);
 
-    // 7. Deep sleep — the chip restarts from the top of setup() on wake
+    // 8. Deep sleep — the chip restarts from the top of setup() on wake
     goToSleep(SLEEP_SECONDS);
 }
 
