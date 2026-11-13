@@ -3,6 +3,7 @@
 #include <DNSServer.h>
 #include <WebServer.h>
 #include "config.h"
+#include "watchdog.h"
 
 #define PORTAL_AP_SSID "ClimateNode-Setup"
 #define PORTAL_AP_PASSWORD "climate-setup" // WPA2, min 8 chars; fixed default for now
@@ -187,6 +188,7 @@ void runProvisioningPortal()
     // Stay awake serving the portal until config is saved (handleSave reboots).
     while (true)
     {
+        watchdogFeed(); // the portal runs indefinitely — feed each iteration
         dnsServer.processNextRequest();
         server.handleClient();
         delay(10);

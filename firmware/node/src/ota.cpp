@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <HTTPUpdate.h>
 #include "transport.h" // sendStatus()
+#include "watchdog.h"
 
 #define WIFI_CONNECT_TIMEOUT_MS 15000
 
@@ -12,7 +13,10 @@ void runOtaMode(const NodeConfig &cfg, const char *url)
     WiFi.begin(cfg.wifi_ssid.c_str(), cfg.wifi_pass.c_str());
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_CONNECT_TIMEOUT_MS)
+    {
+        watchdogFeed();
         delay(250);
+    }
     if (WiFi.status() != WL_CONNECTED)
     {
         Serial.println("OTA mode: Wi-Fi connect failed, rebooting");
@@ -38,6 +42,11 @@ void runOtaMode(const NodeConfig &cfg, const char *url)
     // reboots into the new firmware on success — this never returns then.
     // A failed download is safe: the old firmware keeps running.
     Serial.printf("OTA mode: downloading firmware from %s\n", url);
+    httpUpdate.onProgress([](int cur, int total)
+                          {
+                          (void)cur;
+                          (void)total;
+                          watchdogFeed(); });
     WiFiClient client;
     t_httpUpdate_return ret = httpUpdate.update(client, url);
     if (ret == HTTP_UPDATE_OK)

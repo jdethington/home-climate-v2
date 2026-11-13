@@ -4,6 +4,7 @@
 #include <esp_wifi.h>
 #include "payload.h"   // ESPNOW_CHANNEL
 #include "transport.h" // sendStatus()
+#include "watchdog.h"
 
 #define PAIR_TIMEOUT_MS 60000 // listen for the beacon up to 60 s
 
@@ -41,7 +42,11 @@ bool runPairingMode(NodeConfig &cfg)
     beaconGot = false;
     unsigned long start = millis();
     while (millis() - start < PAIR_TIMEOUT_MS && !beaconGot)
+    {
+        watchdogFeed(); // the 60 s listen exceeds the 30 s timeout
         delay(50);
+    }
+
     if (!beaconGot)
     {
         Serial.println("Pairing: no beacon heard — keeping the stored config");
