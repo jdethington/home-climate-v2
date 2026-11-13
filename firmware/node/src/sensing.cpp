@@ -1,6 +1,6 @@
 #include "sensing.h"
 #include <DHT.h>
-#include <Math.h>
+#include <math.h>
 
 // Must survive deep sleep (each wake is a fresh boot). RTC_DATA_ATTR
 // re-initializes to 0 on power-up/reset — which is exactly the "unknown,
@@ -38,7 +38,7 @@ SensorReading readSensor(uint8_t pin)
         if (tryRead(pin, detectedType, r.temp_c, r.humidity))
         {
             failCount = 0;
-            snprintf(r.model, sizeof(r.model),"DHT%d", detectedType);
+            snprintf(r.model, sizeof(r.model), "DHT%d", detectedType);
             r.ok = true;
             return r;
         }
