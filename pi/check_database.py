@@ -1,6 +1,6 @@
 """Quick checks for database.py (issue #11). Run from pi/:
 source venv/bin/activate
-python test_database.py
+python check_database.py
 """
 import os
 from database import Database
