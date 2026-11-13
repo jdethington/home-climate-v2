@@ -8,6 +8,7 @@
 #include "transport.h" // sendPayload() - ESP-NOW unicast + downlink listen
 #include "power.h"     // readBattery(), goToSleep()
 #include "ota.h"       // runOtaMode() - join Wi-Fi, announce ota_ready, download firmware
+#include "watchdog.h"
 
 #define SLEEP_SECONDS 300 // 5 minutes
 #define DHT_PIN 4         // same pon as v1 hub DHT - sensing code
@@ -20,6 +21,8 @@ void setup()
     Serial.begin(115200);
     delay(1000); // wait for serial to be ready
     bootCount++;
+
+    watchdogSetup(); // issue #23 — reboot instead of hanging
 
     // 1. Config - reads NVS; the captive portal
     NodeConfig cfg = loadConfig();
