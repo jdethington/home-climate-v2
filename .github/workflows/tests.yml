@@ -1,0 +1,43 @@
+name: Tests
+
+on: [push, pull_request]
+
+jobs:
+  pytest:
+    name: Python tests (Pi)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: pip install -r pi/requirements-dev.txt
+      - name: Run pytest
+        run: python -m pytest
+        working-directory: pi
+
+  platformio:
+    name: Firmware tests + builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: ${{ runner.os }}-pio-${{ hashFiles('firmware/**/platformio.ini') }}
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Run Unity tests
+        run: pio test -e native
+        working-directory: firmware/node
+      - name: Build node firmware
+        run: pio run -e node
+        working-directory: firmware/node
+      - name: Build gateway firmware
+        run: pio run -e gateway
+        working-directory: firmware/gateway
