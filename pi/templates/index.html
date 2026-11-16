@@ -188,7 +188,8 @@
             sensors.forEach((s) => {
                 const ota = freshOtaStatus(s.node_id, nodeStatus);
                 const pending = pendingUpdates.has(s.node_id);
-                const updateAvailable = latestFw && compareVersions(s.fw_version, latestFw) < 0;
+                const isGateway = s.fw_version === "gateway";
+                const updateAvailable = latestFw && !isGateway && compareVersions(s.fw_version, latestFw) < 0;
                 let otaHtml;
                 if (ota) {
                     otaHtml = `<p>Updating to ${latestFw}…</p>`;
@@ -196,6 +197,8 @@
                     otaHtml = `<p>Waiting for node… (up to 5 min)</p>`;
                 } else if (updateAvailable) {
                     otaHtml = `<button data-update="${s.node_id}">Update to ${latestFw}</button>`;
+                } else if (isGateway) {
+                    otaHtml = `<p>Gateway</p>`;
                 } else {
                     otaHtml = `<p>Up to date</p>`;
                 }
