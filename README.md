@@ -25,6 +25,30 @@ and is untouched by this repo.
 Nodes are dumb pipes: sense, send, sleep. All thresholds, hysteresis, and
 decision logic live on the Pi in Python, so tuning is a config edit, not a reflash.
 
+## Gateway LEDs + sensor
+
+The gateway runs on the v1 hub's breadboard with the same wiring, and has
+its own indication lights plus a DHT11 sensor (GPIO 4).
+
+LEDs (all on the gateway board):
+
+- WiFi (GPIO 16) — on when connected to the AP.
+- RGB (GPIO 13/14/18, common-cathode, PWM) — green (0,180,0) when the
+  Pi's verdict is OPEN, red (200,0,0) when CLOSED. Driven from the
+  `homeclimate/recommendation` MQTT topic.
+- Indoor (GPIO 19) and outdoor (GPIO 25) — PWM brightness by data
+  freshness: full under 5 min, 2/3 under 10 min, 1/3 under 15 min, off
+  after 15 min (nodes report every 5 min, so each missed cycle drops a
+  level).
+- RX (GPIO 2, onboard) — blinks 150 ms on each ESP-NOW packet received.
+
+The gateway's own sensor reports as node `indoor0` (location "backdoor")
+every 5 min via MQTT, like a node — `fw_version` is `"gateway"` and
+`batt_v` is null (mains-powered). It counts toward the indoor zone
+average (the recommender matches the `indoor` prefix). The dashboard
+shows "Gateway" in place of a firmware update button for it; the gateway
+itself updates over ElegantOTA at `http://<gateway-ip>/update`.
+
 ## MQTT topics
 
 - `homeclimate/sensor/<node-id>` — node readings (JSON from gateway)
