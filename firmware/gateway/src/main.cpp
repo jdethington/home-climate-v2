@@ -6,10 +6,12 @@
 #include "mqtt.h"     // mqttSetup(), mqttLoop()
 #include "espnow.h"   // espnowSetup() - ESP-NOW init + receive callback
 #include "ota.h"      // otaSetup(), otaLoop() - ElegantOTA update server
+#include "leds.h"     // ledsSetup(), ledsLoop() - status LEDs
 
 void setup()
 {
     Serial.begin(115200);
+    ledsSetup(); // status LEDs
     delay(1000);
 
     GatewayConfig cfg = loadGatewayConfig();
@@ -38,5 +40,6 @@ void loop()
     mqttLoop();   // keeps MQTT alive, reconnects if needed
     espnowLoop(); // turns off the RX LED after its blink
     otaLoop();    // serves the /update page
+    ledsLoop();   // status LEDs: Wi-Fi, indoor/outdoor freshness, verdict
     delay(10);
 }
