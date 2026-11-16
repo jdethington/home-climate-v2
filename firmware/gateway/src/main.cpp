@@ -6,10 +6,13 @@
 #include "mqtt.h"     // mqttSetup(), mqttLoop()
 #include "espnow.h"   // espnowSetup() - ESP-NOW init + receive callback
 #include "ota.h"      // otaSetup(), otaLoop() - ElegantOTA update server
+#include "leds.h"     // ledsSetup(), ledsLoop() - status LEDs
+#include "gwsensor.h" // gwsensorSetup(), gwsensorLoop() - gateway's own DHT11
 
 void setup()
 {
     Serial.begin(115200);
+    ledsSetup(); // status LEDs
     delay(1000);
 
     GatewayConfig cfg = loadGatewayConfig();
@@ -28,9 +31,10 @@ void setup()
                   WiFi.SSID().c_str(), WiFi.channel(),
                   WiFi.localIP().toString().c_str());
 
-    espnowSetup(); // ESP-NOW init + receive callback (rides the Wi-Fi channel)
-    mqttSetup();   // MQTT connect + subscribe homeclimate/cmd/#
-    otaSetup();    // ElegantOTA update page (Wi-Fi is already up)
+    espnowSetup();   // ESP-NOW init + receive callback (rides the Wi-Fi channel)
+    mqttSetup();     // MQTT connect + subscribe homeclimate/cmd/#
+    gwsensorSetup(); // gateway's own DHT11/22 (GPIO 4)
+    otaSetup();      // ElegantOTA update page (Wi-Fi is already up)
 }
 
 void loop()
@@ -38,5 +42,7 @@ void loop()
     mqttLoop();   // keeps MQTT alive, reconnects if needed
     espnowLoop(); // turns off the RX LED after its blink
     otaLoop();    // serves the /update page
+    ledsLoop();   // status LEDs: Wi-Fi, indoor/outdoor freshness, verdict
+    gwsensorLoop(); // gateway's own DHT11/22 (GPIO 4)
     delay(10);
 }
