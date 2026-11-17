@@ -51,9 +51,14 @@ def on_message(client, userdata, msg):
         print(f"Ignoring bad JSON on {msg.topic}")
         return
     node_id = payload.get("node_id")
+
     if not node_id:
         print(f"Ignoring message without node_id on {msg.topic}")
         return
+
+    if userdata["db"].is_hidden(node_id):
+        userdata["db"].unhide_node(node_id)
+        print(f"Re-added {node_id} — it reported again after being removed")
 
     userdata["db"].insert_reading(
         node_id,
@@ -66,7 +71,9 @@ def on_message(client, userdata, msg):
     userdata["recommender"].update(
         node_id, payload.get("temp_c"), payload.get("humidity")
     )
-    verdict, reasons = userdata["recommender"].recommend()
+    verdict, reasons = userdata["recommender"].recommend(
+        hidden=userdata["db"].get_hidden_nodes()
+    )
     userdata["db"].set_latest_recommendation(verdict, reasons)
 
     if verdict != userdata["last_verdict"]:

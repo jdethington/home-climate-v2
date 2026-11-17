@@ -1,6 +1,7 @@
 #include "mqtt.h"
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
 #include "espnow.h" // espnowSend() - forward cmd messages to nodes
 #include "leds.h"
 
@@ -9,6 +10,7 @@
 #define CLIENT_ID "climate-gateway"
 #define CMD_TOPIC "homeclimate/cmd/#"
 #define REC_TOPIC "homeclimate/recommendation"
+#define GW_CMD_TOPIC "homeclimate/gateway/cmd"
 
 static WiFiClient wifiClient;
 static PubSubClient client(wifiClient);
@@ -29,9 +31,33 @@ static void onMqttMessage(char *topic, byte *payload, unsigned int length)
         ledsSetVerdict(strstr(buf, "\"OPEN\"") != nullptr);
         return;
     }
+
+    if (t == GW_CMD_TOPIC)
+    {
+        char buf[128];
+        unsigned int n = length < sizeof(buf) - 1 ? length : sizeof(buf) - 1;
+        memcpy(buf, payload, n);
+        buf[n] = '\0';
+        JsonDocument doc;
+        if (deserializeJson(doc, buf))
+        {
+            Serial.println("GWCMD: bad JSON, ignored");
+            return;
+        }
+        const char *forgetId = doc["forget"];
+        if (forgetId == nullptr || forgetId[0] == '\0')
+        {
+            Serial.println("GWCMD: no \"forget\" key, ignored");
+            return;
+        }
+        ledsForgetNode(forgetId);
+        return;
+    }
+
     // Topic: homeclimate/cmd/<node-id> — queue it; the node is asleep most
     // of the time, so the gateway forwards it on the node's next reading.
     const String prefix = "homeclimate/cmd/";
+
     if (!t.startsWith(prefix))
         return;
     String nodeId = t.substring(prefix.length());
@@ -46,6 +72,7 @@ static bool reconnect()
         Serial.println("MQTT connected");
         client.subscribe(CMD_TOPIC);
         client.subscribe(REC_TOPIC);
+        client.subscribe(GW_CMD_TOPIC);
         Serial.println("Subscribed: homeclimate/cmd/#");
         return true;
     }

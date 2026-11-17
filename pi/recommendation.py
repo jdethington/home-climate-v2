@@ -84,10 +84,13 @@ class Recommender:
             group[node_id] = avg
         avg.add(temp_c, humidity)
 
-    def _zone_average(self, group):
-        """Average over all nodes in a zone (indoor or outdoor)."""
+    def _zone_average(self, group, hidden=frozenset()):
+        """Average over all nodes in a zone (indoor or outdoor),
+        skipping nodes the user removed."""
         temps, hums = [], []
-        for avg in group.values():
+        for node_id, avg in group.items():
+            if node_id in hidden:
+                continue
             a = avg.average()
             if a is None:
                 continue
@@ -99,10 +102,10 @@ class Recommender:
         hums = sum(hums) / len(hums)
         return temps, hums, dew_point(temps, hums)
 
-    def recommend(self):
+    def recommend(self, hidden=frozenset()):
         """Return (state, reasons): the verdict and why, in plain words."""
-        indoor = self._zone_average(self.indoor)
-        outdoor = self._zone_average(self.outdoor)
+        indoor = self._zone_average(self.indoor, hidden)
+        outdoor = self._zone_average(self.outdoor, hidden)
         if indoor is None:
             return self.state, ["waiting for indoor readings"]
         if outdoor is None:

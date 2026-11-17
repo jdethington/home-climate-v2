@@ -14,3 +14,6 @@ void ledsLoop();
 void ledsMarkNodeFresh(const char *nodeId, bool sensorOk);
 // Call when a recommendation verdict arrives — green OPEN, red CLOSED.
 void ledsSetVerdict(bool open);
+// Remove a node from LED tracking (user removed it). If it reports
+// again, ledsMarkNodeFresh re-adds it automatically.
+void ledsForgetNode(const char *nodeId);

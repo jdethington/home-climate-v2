@@ -173,6 +173,23 @@ void ledsMarkNodeFresh(const char *nodeId, bool sensorOk)
     Serial.printf("LEDS: tracking %s (%u nodes)\n", nodeId, nodeCount);
 }
 
+void ledsForgetNode(const char *nodeId)
+{
+    for (uint8_t i = 0; i < nodeCount; i++)
+    {
+        if (strcmp(nodes[i].nodeId, nodeId) != 0)
+            continue;
+        // Shift the rest of the table down over the removed entry.
+        for (uint8_t j = i; j + 1 < nodeCount; j++)
+            nodes[j] = nodes[j + 1];
+        nodeCount--;
+        saveTrackedNodes();
+        Serial.printf("LEDS: forgot %s (%u nodes)\n", nodeId, nodeCount);
+        return;
+    }
+    Serial.printf("LEDS: forget %s — not tracked, ignored\n", nodeId);
+}
+
 // Sensor-dead pattern: two quick flashes, a long pause, repeating —
 // continuous while any node in the zone reports a dead sensor.
 // Steps: 0 = blink 1 on, 1 = off, 2 = blink 2 on, 3 = pause. Repeats.

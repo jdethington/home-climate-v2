@@ -128,3 +128,13 @@ def test_unknown_node_ids_ignored():
     r.update("node-B204", 20, 30)  # provisional id, no zone
     _, reasons = r.recommend()
     assert "waiting for indoor readings" in reasons
+
+def test_hidden_nodes_excluded_from_average():
+    r = Recommender({"recommendation": {"average_readings": 1}})
+    r.update("indoor1", 20.0, 50.0)
+    r.update("indoor2", 30.0, 50.0)  # would skew the average if counted
+    r.update("outdoor1", 10.0, 50.0)
+    state, reasons = r.recommend(hidden={"indoor2"})
+    assert state == "OPEN"
+    # The indoor average is 20.0C (indoor2 excluded), not 25.0C.
+    assert "20.0C" in reasons[0]

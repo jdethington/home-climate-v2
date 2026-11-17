@@ -87,6 +87,16 @@ MIGRATIONS = {
             first_seen TEXT NOT NULL
         )""",
     ],
+
+    6: [
+        # Nodes the user removed from the dashboard + LED tracking.
+        # Their readings are still logged (history intact); a reading
+        # from a hidden node un-hides it automatically (re-add).
+        """CREATE TABLE IF NOT EXISTS hidden_nodes (
+            node_id TEXT PRIMARY KEY,
+            hidden_at TEXT NOT NULL
+        )""",
+    ],
 }
 
 def _now_iso():
@@ -220,6 +230,27 @@ class Database:
     def mark_device_named(self, mac):
         self.conn.execute("DELETE FROM paired_devices WHERE mac = ?", (mac,))
         self.conn.commit()
+
+    def hide_node(self, node_id):
+        self.conn.execute(
+            "INSERT OR REPLACE INTO hidden_nodes (node_id, hidden_at) VALUES (?, ?)",
+            (node_id, _now_iso()),
+        )
+        self.conn.commit()
+
+    def unhide_node(self, node_id):
+        self.conn.execute("DELETE FROM hidden_nodes WHERE node_id = ?", (node_id,))
+        self.conn.commit()
+
+    def is_hidden(self, node_id):
+        row = self.conn.execute(
+            "SELECT 1 FROM hidden_nodes WHERE node_id = ?", (node_id,)
+        ).fetchone()
+        return row is not None
+
+    def get_hidden_nodes(self):
+        rows = self.conn.execute("SELECT node_id FROM hidden_nodes").fetchall()
+        return {r[0] for r in rows}
 
     def clear_node_status(self, node_id):
         # A node sending readings is definitively out of OTA mode.
