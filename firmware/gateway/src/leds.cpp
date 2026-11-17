@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <cstring>
 #include "parse.h" // validNodeId()
+#include <Preferences.h>
 
 #define LED_WIFI 16
 #define LED_RGB_R 13
@@ -30,6 +31,12 @@
 #define DUTY_DIM 64 // quarter brightness — a node in the zone is stale
 
 #define MAX_TRACKED_NODES 8 // matches the gateway's ESP-NOW peer table
+
+// NVS keys for the tracked-node list (namespace "climate", shared with
+// the Wi-Fi config). The list is saved when a node is added, loaded on boot.
+#define NVS_NAMESPACE "climate"
+#define NVS_COUNT_KEY "led_count"
+// Node IDs live under "led_node0".."led_node7".
 
 struct TrackedNode
 {
@@ -90,6 +97,54 @@ static uint8_t nodeNumber(const char *nodeId)
     return n;
 }
 
+static void saveTrackedNodes()
+{
+    Preferences prefs;
+    prefs.begin(NVS_NAMESPACE, false); // read-write
+    prefs.putUChar(NVS_COUNT_KEY, nodeCount);
+    for (uint8_t i = 0; i < nodeCount; i++)
+    {
+        char key[12];
+        snprintf(key, sizeof(key), "led_node%u", i);
+        prefs.putString(key, nodes[i].nodeId);
+    }
+    // Clear any stale keys beyond the current list (a node was removed).
+    for (uint8_t i = nodeCount; i < MAX_TRACKED_NODES; i++)
+    {
+        char key[12];
+        snprintf(key, sizeof(key), "led_node%u", i);
+        prefs.remove(key);
+    }
+    prefs.end();
+}
+
+static void loadTrackedNodes()
+{
+    Preferences prefs;
+    prefs.begin(NVS_NAMESPACE, true); // read-only
+    uint8_t count = prefs.getUChar(NVS_COUNT_KEY, 0);
+    if (count > MAX_TRACKED_NODES)
+        count = MAX_TRACKED_NODES;
+    unsigned long now = millis();
+    for (uint8_t i = 0; i < count; i++)
+    {
+        char key[12];
+        snprintf(key, sizeof(key), "led_node%u", i);
+        String id = prefs.getString(key, "");
+        if (id.length() == 0 || !validNodeId(id.c_str()))
+            continue;
+        snprintf(nodes[nodeCount].nodeId, sizeof(nodes[nodeCount].nodeId), "%s", id.c_str());
+        // Freshness is unknown after a reboot — give every loaded node
+        // the full grace window (it will report within 5 min if alive).
+        nodes[nodeCount].lastMs = now;
+        nodes[nodeCount].sensorOk = true; // assume OK until it reports otherwise
+        nodeCount++;
+    }
+    prefs.end();
+    if (nodeCount > 0)
+        Serial.printf("LEDS: loaded %u nodes from NVS\n", nodeCount);
+}
+
 void ledsMarkNodeFresh(const char *nodeId, bool sensorOk)
 {
     // Only named indoor/outdoor nodes are tracked — provisional IDs
@@ -114,6 +169,7 @@ void ledsMarkNodeFresh(const char *nodeId, bool sensorOk)
     nodes[nodeCount].lastMs = millis();
     nodes[nodeCount].sensorOk = sensorOk;
     nodeCount++;
+    saveTrackedNodes();
     Serial.printf("LEDS: tracking %s (%u nodes)\n", nodeId, nodeCount);
 }
 
@@ -275,6 +331,7 @@ void ledsSetup()
     indoorBlink.lastSeqMs = 0;
     outdoorBlink.phase = BlinkPhase::IDLE;
     outdoorBlink.lastSeqMs = 0;
+    loadTrackedNodes();
 }
 
 void ledsLoop()
