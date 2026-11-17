@@ -36,11 +36,29 @@ LEDs (all on the gateway board):
 - RGB (GPIO 13/14/18, common-cathode, PWM) — green (0,180,0) when the
   Pi's verdict is OPEN, red (200,0,0) when CLOSED. Driven from the
   `homeclimate/recommendation` MQTT topic.
-- Indoor (GPIO 19) and outdoor (GPIO 25) — PWM brightness by data
-  freshness: full under 5 min, 2/3 under 10 min, 1/3 under 15 min, off
-  after 15 min (nodes report every 5 min, so each missed cycle drops a
-  level).
+- Indoor (GPIO 19) and outdoor (GPIO 25) — per-node freshness tracking.
+  The gateway tracks each node individually (up to 8), so one silent node
+  can't hide behind another in the same zone that still reports. A node
+  is stale if it hasn't reported within 6 min (one 5-min cycle + 1 min
+  of slack):
+  - All nodes in the zone fresh → LED at full brightness.
+  - A node stale → LED dims to 1/4 brightness, and once per minute it
+    blinks the missing node number at full brightness (two blinks = node 2).
+  - A node reporting with a broken sensor (NaN readings) → fast
+    double-blink (two 150 ms flashes, 1 s pause, repeating) at full
+    brightness. Sensor-dead takes priority over the stale blink.
+  - The gateway's own sensor (`indoor0`) never blinks a number — if it
+    fails, that's a sensor failure, shown by the double-blink.
+  - Un-named (provisional `node-XXXX`) nodes aren't tracked until named.
 - RX (GPIO 2, onboard) — blinks 150 ms on each ESP-NOW packet received.
+
+The known-node list is stored in the gateway's NVS (namespace `climate`),
+so it survives a reboot — loaded nodes get a 6-min grace window to
+report. Stale nodes are never removed automatically: the dashboard's
+Remove button hides the node (its readings stay logged, and removed
+nodes are excluded from the recommendation averages) and tells the
+gateway to forget it via `homeclimate/gateway/cmd`. A removed node that
+reports again is re-added automatically, on both sides.
 
 The gateway's own sensor reports as node `indoor0` (location "backdoor")
 every 5 min via MQTT, like a node — `fw_version` is `"gateway"` and
@@ -56,6 +74,9 @@ itself updates over ElegantOTA at `http://<gateway-ip>/update`.
 - `homeclimate/cmd/<node-id>` — downlink commands (e.g. `{"ota": true}`)
 - `homeclimate/status/<node-id>` — node status (e.g. `ota_ready`)
 - `homeclimate/alerts` — current active dust alerts (retained JSON)
+- `homeclimate/gateway/cmd` — commands for the gateway itself (e.g. `{"forget": "<node-id>"}`)
+- `homeclimate/pairing` — node pairing announcements (issue #21)
+
 
 ## Node payload (ESP-NOW binary struct)
 

@@ -322,7 +322,7 @@
             const btn = e.target.closest("[data-remove]");
             if (!btn) return;
             const nodeId = btn.dataset.remove;
-            if (!confirm(`Remove ${nodeId} from the dashboard and LED tracking ? Its readings stay logged, and it comes back automatically if it reports again.`)) return;
+            if (!confirm(`Remove ${nodeId} from the dashboard and LED tracking? Its readings stay logged, and it comes back automatically if it reports again.`)) return;
             btn.disabled = true;
             try {
                 const res = await fetch(`/api/remove/${nodeId}`, { method: "POST" });

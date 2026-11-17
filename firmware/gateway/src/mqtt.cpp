@@ -73,7 +73,7 @@ static bool reconnect()
         client.subscribe(CMD_TOPIC);
         client.subscribe(REC_TOPIC);
         client.subscribe(GW_CMD_TOPIC);
-        Serial.println("Subscribed: homeclimate/cmd/#");
+        Serial.println("Subscribed: cmd/#, recommendation, gateway/cmd");
         return true;
     }
     Serial.printf("MQTT connect failed, rc=%d\n", client.state());

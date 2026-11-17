@@ -1,5 +1,5 @@
 """SQLite storage (issue #11): readings, events, latest_recommendation,
-nws_alerts, node_status, paired_devices. WAL mode.
+nws_alerts, node_status, paired_devices, hidden_nodes. WAL mode.
 
 The database file itself is gitignored (*.db in .gitignore) — only the
 schema (this file) lives in the repo. Timestamps are stamped here at
