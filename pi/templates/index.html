@@ -306,14 +306,14 @@
             const nodeId = btn.dataset.update;
             btn.disabled = true;
             try {
-                const res = await fetch(`/ api / update / ${ nodeId } `, { method: "POST" });
+                const res = await fetch(`/api/update/${nodeId}`, { method: "POST" });
                 const data = await res.json();
                 if (!data.ok) throw new Error(data.error || "publish failed");
                 pendingUpdates.add(nodeId);
                 waitForOta(nodeId, lastStatus.latest_fw_version);
                 await loadStatus();  // re-render to show "Waiting…"
             } catch (err) {
-                alert(`Update failed: ${ err.message } `);
+                alert(`Update failed: ${err.message} `);
                 btn.disabled = false;
             }
         });
@@ -322,15 +322,15 @@
             const btn = e.target.closest("[data-remove]");
             if (!btn) return;
             const nodeId = btn.dataset.remove;
-            if (!confirm(`Remove ${ nodeId } from the dashboard and LED tracking ? Its readings stay logged, and it comes back automatically if it reports again.`)) return;
+            if (!confirm(`Remove ${nodeId} from the dashboard and LED tracking ? Its readings stay logged, and it comes back automatically if it reports again.`)) return;
             btn.disabled = true;
             try {
-                const res = await fetch(`/ api / remove / ${ nodeId } `, { method: "POST" });
+                const res = await fetch(`/api/remove/${nodeId}`, { method: "POST" });
                 const data = await res.json();
                 if (!data.ok) throw new Error(data.error || "remove failed");
                 await loadStatus();  // re-render without the removed card
             } catch (err) {
-                alert(`Remove failed: ${ err.message }`);
+                alert(`Remove failed: ${err.message}`);
                 btn.disabled = false;
             }
         });
@@ -356,7 +356,7 @@
                 lastNewDevicesKey = ""; // force the section to re-render
                 await loadStatus();
             } catch (err) {
-                alert(`Naming failed: ${ err.message }`);
+                alert(`Naming failed: ${err.message}`);
                 btn.disabled = false;
             }
         });
