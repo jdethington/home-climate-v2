@@ -21,6 +21,11 @@
 #define BLINK_OFF_MS 200          // 200 ms dim between blinks
 #define BLINK_GAP_MS 600          // 600 ms dim between node numbers
 
+// Sensor-dead double-blink: two quick flashes, then a long pause, repeating.
+#define DBL_ON_MS 150
+#define DBL_OFF_MS 150
+#define DBL_PAUSE_MS 1000
+
 #define DUTY_FULL 255
 #define DUTY_DIM 64 // quarter brightness — a node in the zone is stale
 
@@ -30,6 +35,7 @@ struct TrackedNode
 {
     char nodeId[16];
     unsigned long lastMs; // last report (millis)
+    bool sensorOk;        // false if the last payload had NaN readings
 };
 
 static TrackedNode nodes[MAX_TRACKED_NODES];
@@ -40,7 +46,8 @@ enum class BlinkPhase
     IDLE,
     ON,
     OFF,
-    GAP
+    GAP,
+    DBL // sensor-dead double-blink (continuous)
 };
 
 struct ZoneBlink
@@ -83,7 +90,7 @@ static uint8_t nodeNumber(const char *nodeId)
     return n;
 }
 
-void ledsMarkNodeFresh(const char *nodeId)
+void ledsMarkNodeFresh(const char *nodeId, bool sensorOk)
 {
     // Only named indoor/outdoor nodes are tracked — provisional IDs
     // (node-XXXX) are excluded until the node is named.
@@ -94,6 +101,7 @@ void ledsMarkNodeFresh(const char *nodeId)
         if (strcmp(nodes[i].nodeId, nodeId) == 0)
         {
             nodes[i].lastMs = millis();
+            nodes[i].sensorOk = sensorOk;
             return;
         }
     }
@@ -104,8 +112,30 @@ void ledsMarkNodeFresh(const char *nodeId)
     }
     snprintf(nodes[nodeCount].nodeId, sizeof(nodes[nodeCount].nodeId), "%s", nodeId);
     nodes[nodeCount].lastMs = millis();
+    nodes[nodeCount].sensorOk = sensorOk;
     nodeCount++;
     Serial.printf("LEDS: tracking %s (%u nodes)\n", nodeId, nodeCount);
+}
+
+// Sensor-dead pattern: two quick flashes, a long pause, repeating —
+// continuous while any node in the zone reports a dead sensor.
+// Steps: 0 = blink 1 on, 1 = off, 2 = blink 2 on, 3 = pause. Repeats.
+static void updateDoubleBlink(int pin, ZoneBlink &b, unsigned long now)
+{
+    static const unsigned long stepMs[4] = {DBL_ON_MS, DBL_OFF_MS, DBL_ON_MS, DBL_PAUSE_MS};
+    if (b.phase != BlinkPhase::DBL)
+    {
+        b.phase = BlinkPhase::DBL;
+        b.blinkIdx = 0; // reused as the step counter
+        b.phaseStartMs = now;
+        ledcWrite(pin, DUTY_FULL);
+        return;
+    }
+    if (now - b.phaseStartMs < stepMs[b.blinkIdx])
+        return; // still in this step
+    b.blinkIdx = (b.blinkIdx + 1) % 4;
+    b.phaseStartMs = now;
+    ledcWrite(pin, (b.blinkIdx == 0 || b.blinkIdx == 2) ? DUTY_FULL : DUTY_DIM);
 }
 
 // Drive one zone LED: off (no known nodes), full (all fresh), or dim
@@ -114,18 +144,28 @@ static void updateZoneLed(int pin, bool indoor, ZoneBlink &b, unsigned long now)
 {
     uint8_t known = 0;
     uint8_t stale = 0;
+    uint8_t sensorDead = 0;
     for (uint8_t i = 0; i < nodeCount; i++)
     {
         if (isIndoor(nodes[i].nodeId) != indoor)
             continue;
         known++;
+        // A silent node is stale whatever its last sensor state was;
+        // sensor-dead only applies while the node is still reporting.
         if (now - nodes[i].lastMs > STALE_MS)
             stale++;
+        else if (!nodes[i].sensorOk)
+            sensorDead++;
     }
     if (known == 0)
     {
         ledcWrite(pin, 0);
         b.phase = BlinkPhase::IDLE;
+        return;
+    }
+    if (sensorDead > 0)
+    {
+        updateDoubleBlink(pin, b, now);
         return;
     }
     if (stale == 0)
@@ -211,6 +251,10 @@ static void updateZoneLed(int pin, bool indoor, ZoneBlink &b, unsigned long now)
             b.phaseStartMs = now;
             ledcWrite(pin, DUTY_FULL);
         }
+        break;
+    default: // leaving double-blink mode — reset to IDLE
+        b.phase = BlinkPhase::IDLE;
+        ledcWrite(pin, DUTY_DIM);
         break;
     }
 }

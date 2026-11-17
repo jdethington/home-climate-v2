@@ -32,6 +32,7 @@ void gwsensorLoop()
     if (isnan(t) || isnan(h))
     {
         Serial.println("GWSENSOR: DHT read failed");
+        ledsMarkNodeFresh(SENSOR_NODE_ID, false);
         return;
     }
 
@@ -52,7 +53,7 @@ void gwsensorLoop()
     if (mqttPublish(topic, jsonStr))
     {
         Serial.printf("GWSENSOR %s: %.1fC %.1f%% -> %s\n", SENSOR_NODE_ID, t, h, topic.c_str());
-        ledsMarkNodeFresh(SENSOR_NODE_ID);
+        ledsMarkNodeFresh(SENSOR_NODE_ID, true); // mark the gateway's own sensor fresh
     }
     else
         Serial.println("GWSENSOR: MQTT not connected, reading dropped");

@@ -10,7 +10,7 @@
 void ledsSetup();
 void ledsLoop();
 // Call when a sensor reading arrives — marks that node fresh.
-// Provisional IDs (node-XXXX) are ignored until the node is named.
-void ledsMarkNodeFresh(const char *nodeId);
+// sensorOk is false when the node's sensor is dead (NaN readings).
+void ledsMarkNodeFresh(const char *nodeId, bool sensorOk);
 // Call when a recommendation verdict arrives — green OPEN, red CLOSED.
 void ledsSetVerdict(bool open);
