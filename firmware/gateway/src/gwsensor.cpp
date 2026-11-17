@@ -3,6 +3,7 @@
 #include <DHT.h>
 #include <ArduinoJson.h>
 #include "mqtt.h" // mqttPublish()
+#include "leds.h" // ledsMarkNodeFresh()
 
 #define DHT_PIN 4
 #define DHT_TYPE DHT11
@@ -49,7 +50,10 @@ void gwsensorLoop()
 
     String topic = "homeclimate/sensor/" + String(SENSOR_NODE_ID);
     if (mqttPublish(topic, jsonStr))
+    {
         Serial.printf("GWSENSOR %s: %.1fC %.1f%% -> %s\n", SENSOR_NODE_ID, t, h, topic.c_str());
+        ledsMarkNodeFresh(SENSOR_NODE_ID);
+    }
     else
         Serial.println("GWSENSOR: MQTT not connected, reading dropped");
 }
