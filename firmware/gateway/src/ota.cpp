@@ -1,5 +1,6 @@
 #include "ota.h"
 #include <WebServer.h>
+#include <WiFi.h>
 #include <ElegantOTA.h>
 
 static WebServer server(80);
@@ -12,7 +13,7 @@ void otaSetup()
               { server.send(200, "text/plain", "Climate gateway — OTA build 1.1.1 — firmware update at /update"); });
     ElegantOTA.begin(&server);
     server.begin();
-    Serial.println("OTA update page at http://<gateway-ip>/update");
+    Serial.printf("OTA update page at http://%s/update\n", WiFi.localIP().toString().c_str());
 }
 
 void otaLoop()

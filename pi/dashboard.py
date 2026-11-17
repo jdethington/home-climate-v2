@@ -81,6 +81,8 @@ def api_status():
             }
             for row in latest
         ]
+        hidden = db.get_hidden_nodes()
+        sensors = [s for s in sensors if s["node_id"] not in hidden]
         verdict, reasons = db.get_latest_recommendation()
         alerts = db.get_nws_alerts()
         node_status = db.get_node_status()
@@ -134,6 +136,26 @@ def update_node(node_id):
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 502
 
+@app.route("/api/remove/<node_id>", methods=["POST"])
+def remove_node(node_id):
+    """Remove a node from the dashboard + LED tracking: tell the gateway
+    to forget it, then hide it in the DB (its readings stay logged).
+    If the node reports again, it is re-added automatically."""
+    payload = json.dumps({"forget": node_id})
+    try:
+        mqtt_publish.single(
+            "homeclimate/gateway/cmd", payload,
+            hostname=MQTT_HOST, port=MQTT_PORT,
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 502
+    db = Database(DB_PATH)
+    try:
+        db.hide_node(node_id)
+    finally:
+        db.close()
+    return jsonify({"ok": True, "node_id": node_id})
+
 @app.route("/api/name", methods=["POST"])
 def name_device():
     """Name a newly paired device (issue #21): publish a rename command
@@ -171,7 +193,6 @@ def name_device():
         return jsonify({"ok": True, "node_id": node_id})
     finally:
         db.close()
-
 
 @app.route("/firmware/<path:filename>")
 def firmware_file(filename):

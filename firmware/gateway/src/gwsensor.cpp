@@ -3,6 +3,7 @@
 #include <DHT.h>
 #include <ArduinoJson.h>
 #include "mqtt.h" // mqttPublish()
+#include "leds.h" // ledsMarkNodeFresh()
 
 #define DHT_PIN 4
 #define DHT_TYPE DHT11
@@ -31,8 +32,10 @@ void gwsensorLoop()
     if (isnan(t) || isnan(h))
     {
         Serial.println("GWSENSOR: DHT read failed");
+        ledsMarkNodeFresh(SENSOR_NODE_ID, false);
         return;
     }
+    ledsMarkNodeFresh(SENSOR_NODE_ID, true); // sensor is alive — mark fresh on read, like the ESP-NOW nodes
 
     JsonDocument doc;
     doc["node_id"] = SENSOR_NODE_ID;
@@ -49,7 +52,9 @@ void gwsensorLoop()
 
     String topic = "homeclimate/sensor/" + String(SENSOR_NODE_ID);
     if (mqttPublish(topic, jsonStr))
+    {
         Serial.printf("GWSENSOR %s: %.1fC %.1f%% -> %s\n", SENSOR_NODE_ID, t, h, topic.c_str());
+    }
     else
         Serial.println("GWSENSOR: MQTT not connected, reading dropped");
 }

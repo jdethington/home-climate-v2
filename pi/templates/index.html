@@ -209,7 +209,9 @@
                     <p>${toDisplay(s.temp_c)}${unitLabel()} &nbsp; ${s.humidity === null ? "—" : s.humidity + "% RH"}</p>
                     <p>Battery: ${s.batt_v === null ? "—" : s.batt_v.toFixed(2) + " V"} &nbsp; FW ${s.fw_version}</p>
                     <p>Last seen: ${new Date(s.ts).toLocaleString()}</p>
-                    ${otaHtml}`;
+                    ${otaHtml}
+                    ${isGateway ? "" : `<button data-remove="${s.node_id}">Remove</button>`}
+                `;
                 cards.appendChild(div);
             });
         }
@@ -311,7 +313,24 @@
                 waitForOta(nodeId, lastStatus.latest_fw_version);
                 await loadStatus();  // re-render to show "Waiting…"
             } catch (err) {
-                alert(`Update failed: ${err.message}`);
+                alert(`Update failed: ${err.message} `);
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById("cards").addEventListener("click", async (e) => {
+            const btn = e.target.closest("[data-remove]");
+            if (!btn) return;
+            const nodeId = btn.dataset.remove;
+            if (!confirm(`Remove ${nodeId} from the dashboard and LED tracking? Its readings stay logged, and it comes back automatically if it reports again.`)) return;
+            btn.disabled = true;
+            try {
+                const res = await fetch(`/api/remove/${nodeId}`, { method: "POST" });
+                const data = await res.json();
+                if (!data.ok) throw new Error(data.error || "remove failed");
+                await loadStatus();  // re-render without the removed card
+            } catch (err) {
+                alert(`Remove failed: ${err.message}`);
                 btn.disabled = false;
             }
         });

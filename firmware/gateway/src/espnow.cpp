@@ -4,7 +4,8 @@
 #include <ArduinoJson.h>
 #include "payload.h"
 #include "mqtt.h" // mqttPublish()
-#include "leds.h" // ledsMarkZoneFresh()
+#include "leds.h" // ledsMarkNodeFresh()
+#include <math.h>
 
 #define RX_LED_PIN 2
 #define MAX_NODES 8
@@ -213,7 +214,7 @@ static void onEspNowReceive(const esp_now_recv_info_t *info, const uint8_t *data
     SensorPayload pkt;
     memcpy(&pkt, data, sizeof(pkt));
     learnMac(pkt.node_id, info->src_addr);
-    ledsMarkZoneFresh(strncmp(pkt.node_id, "indoor", 6) == 0);
+    ledsMarkNodeFresh(pkt.node_id, !isnan(pkt.temp_c) && !isnan(pkt.humidity));
 
     digitalWrite(RX_LED_PIN, HIGH);
     rxLedOnMs = millis();

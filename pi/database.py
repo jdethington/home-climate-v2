@@ -1,5 +1,5 @@
 """SQLite storage (issue #11): readings, events, latest_recommendation,
-nws_alerts, node_status, paired_devices. WAL mode.
+nws_alerts, node_status, paired_devices, hidden_nodes. WAL mode.
 
 The database file itself is gitignored (*.db in .gitignore) — only the
 schema (this file) lives in the repo. Timestamps are stamped here at
@@ -85,6 +85,16 @@ MIGRATIONS = {
             mac TEXT PRIMARY KEY,
             node_id TEXT NOT NULL,
             first_seen TEXT NOT NULL
+        )""",
+    ],
+
+    6: [
+        # Nodes the user removed from the dashboard + LED tracking.
+        # Their readings are still logged (history intact); a reading
+        # from a hidden node un-hides it automatically (re-add).
+        """CREATE TABLE IF NOT EXISTS hidden_nodes (
+            node_id TEXT PRIMARY KEY,
+            hidden_at TEXT NOT NULL
         )""",
     ],
 }
@@ -220,6 +230,27 @@ class Database:
     def mark_device_named(self, mac):
         self.conn.execute("DELETE FROM paired_devices WHERE mac = ?", (mac,))
         self.conn.commit()
+
+    def hide_node(self, node_id):
+        self.conn.execute(
+            "INSERT OR REPLACE INTO hidden_nodes (node_id, hidden_at) VALUES (?, ?)",
+            (node_id, _now_iso()),
+        )
+        self.conn.commit()
+
+    def unhide_node(self, node_id):
+        self.conn.execute("DELETE FROM hidden_nodes WHERE node_id = ?", (node_id,))
+        self.conn.commit()
+
+    def is_hidden(self, node_id):
+        row = self.conn.execute(
+            "SELECT 1 FROM hidden_nodes WHERE node_id = ?", (node_id,)
+        ).fetchone()
+        return row is not None
+
+    def get_hidden_nodes(self):
+        rows = self.conn.execute("SELECT node_id FROM hidden_nodes").fetchall()
+        return {r[0] for r in rows}
 
     def clear_node_status(self, node_id):
         # A node sending readings is definitively out of OTA mode.
