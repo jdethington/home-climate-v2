@@ -1,0 +1,13 @@
+[Unit]
+Description=Home Climate health check (issue #54)
+After=network-online.target homeclimate.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=piadmin
+WorkingDirectory=/home/piadmin/home-climate-v2/pi
+ExecStart=/home/piadmin/home-climate-v2/pi/venv/bin/python healthcheck.py
+
+[Install]
+WantedBy=multi-user.target
