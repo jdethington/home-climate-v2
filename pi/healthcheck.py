@@ -5,8 +5,11 @@ any node silent longer than the configured threshold. Hidden nodes
 (removed from the dashboard) are excluded — a removed node never
 reports again, so flagging it would be a permanent false alarm.
 
-This module only detects and reports. Alerting (ntfy, state, ack)
-lives in module 2; scheduling in module 3.
+The checker (module 1) asks the database when each node last reported.
+Alerting (module 2) sends an ntfy alert on a new silent episode,
+re-alerts hourly (every 24h once acknowledged), and alerts on recovery;
+health alerts bypass quiet hours. Scheduling (module 3) is a systemd
+timer that runs this script every 5 minutes.
 """
 
 import argparse
@@ -60,6 +63,7 @@ def check_health(db, threshold_minutes, now=None):
         "silent": silent,
         "all_silent": bool(visible) and len(silent) == len(visible),
     }
+
 
 def fresh_state():
     return {

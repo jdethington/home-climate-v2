@@ -19,12 +19,12 @@ import os
 import sqlite3
 import yaml
 import json
+from datetime import datetime, timezone
 
 from flask import Flask, render_template, jsonify, request, send_from_directory, abort
 from database import Database
 from paho.mqtt import publish as mqtt_publish
 
-from datetime import datetime, timezone
 
 from healthcheck import load_state, acknowledge_episode, save_state
 
