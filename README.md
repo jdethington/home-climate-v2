@@ -67,6 +67,46 @@ average (the recommender matches the `indoor` prefix). The dashboard
 shows "Gateway" in place of a firmware update button for it; the gateway
 itself updates over ElegantOTA at `http://<gateway-ip>/update`.
 
+## Health monitoring (#54)
+
+If the Pi, Mosquitto, or the gateway dies, the dashboard just goes
+stale — nobody is told. The health checker fixes that.
+
+`pi/healthcheck.py` runs every 5 minutes from a systemd timer
+(`homeclimate-healthcheck.service` + `homeclimate-healthcheck.timer`)
+and asks the database when each node last reported. A node silent
+longer than `health.silence_minutes` (30) triggers an ntfy alert:
+
+- **New episode** — "system down" if no node has reported, or "node
+  silent" naming the silent nodes. Health alerts bypass quiet hours.
+- **Still silent** — re-alerts every hour (`health.realert_hours`),
+  or every 24 hours (`health.realert_after_ack_hours`) once the
+  episode is acknowledged.
+- **Recovered** — one alert when readings resume.
+
+Acknowledging is a button on the dashboard: when an episode is active
+the dashboard shows a red banner naming the silent nodes, with an
+Acknowledge button (POST `/api/acknowledge`). It also works from the
+command line: `python healthcheck.py --acknowledge`.
+
+State lives in `pi/health_state.json` (gitignored): whether an episode
+is active, when it started, which nodes are silent, when the last
+alert went out, and when the next one is due. If an alert fails to
+send (no topic, or ntfy unreachable) the state is left untouched, so
+the next run retries it.
+
+Hidden nodes (removed from the dashboard) are excluded — a removed
+node never reports again, so flagging it would be a permanent false
+alarm.
+
+The timer service needs the ntfy topic, like the logging service —
+add it with `sudo systemctl edit homeclimate-healthcheck`:
+
+```ini
+[Service]
+Environment=NTFY_TOPIC=<same value as the homeclimate override>
+```
+
 ## MQTT topics
 
 - `homeclimate/sensor/<node-id>` — node readings (JSON from gateway)

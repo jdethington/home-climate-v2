@@ -205,7 +205,14 @@ class Database:
             {"node_id": r[0], "status": r[1], "ip": r[2], "ts": r[3]}
             for r in rows
         ]
-    
+
+    def get_last_seen(self):
+        """Latest reading timestamp per node: {node_id: ts}."""
+        rows = self.conn.execute(
+            "SELECT node_id, MAX(ts) FROM readings GROUP BY node_id"
+        ).fetchall()
+        return {node_id: ts for node_id, ts in rows}
+
     def record_pairing(self, mac, node_id):
         self.conn.execute(
             """INSERT INTO paired_devices (mac, node_id, first_seen)

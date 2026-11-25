@@ -19,10 +19,15 @@ import os
 import sqlite3
 import yaml
 import json
+from datetime import datetime, timezone
 
 from flask import Flask, render_template, jsonify, request, send_from_directory, abort
 from database import Database
 from paho.mqtt import publish as mqtt_publish
+
+
+from healthcheck import load_state, acknowledge_episode, save_state
+
 
 def load_config(path="config.yaml"):
     with open(path) as f:
@@ -89,8 +94,10 @@ def api_status():
         manifest = load_manifest()
         latest_fw = manifest["version"] if manifest else None
         new_devices = db.get_unnamed_devices()
+        health_cfg = config.get("health", {})
+        health_state = load_state(health_cfg.get("state_file", "health_state.json"))
         return jsonify(
-            {"recommendation": verdict, "reasons": reasons, "sensors": sensors, "alerts": alerts, "node_status": node_status, "latest_fw_version": latest_fw, "new_devices": new_devices}
+            {"recommendation": verdict, "reasons": reasons, "sensors": sensors, "alerts": alerts, "node_status": node_status, "latest_fw_version": latest_fw, "new_devices": new_devices, "health": health_state}
         )
     finally:
         db.close()
@@ -155,6 +162,19 @@ def remove_node(node_id):
     finally:
         db.close()
     return jsonify({"ok": True, "node_id": node_id})
+
+@app.route("/api/acknowledge", methods=["POST"])
+def acknowledge():
+    """Acknowledge the current silent episode (issue #54): re-alerts
+    switch from hourly to every 24h until it recovers."""
+    health_cfg = config.get("health", {})
+    state_path = health_cfg.get("state_file", "health_state.json")
+    state = load_state(state_path)
+    if acknowledge_episode(state, datetime.now(timezone.utc),
+                           health_cfg.get("realert_after_ack_hours", 24)):
+        save_state(state_path, state)
+        return jsonify({"ok": True, "next_alert_at": state["next_alert_at"]})
+    return jsonify({"ok": False, "error": "no silent episode to acknowledge"}), 409
 
 @app.route("/api/name", methods=["POST"])
 def name_device():

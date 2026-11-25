@@ -43,6 +43,11 @@
             margin: 0.5rem 0;
         }
 
+        #health .alert-banner {
+            border-color: #c00;
+            background: #fff0f0;
+        }
+
         canvas {
             max-height: 260px;
         }
@@ -75,6 +80,7 @@
         <button id="update-now">Update Now</button>
     </p>
     <div id="alerts"></div>
+    <div id="health"></div>
     <div id="new-devices"></div>
     <ul id="reasons"></ul>
     <div class="cards" id="cards"></div>
@@ -155,6 +161,23 @@
                 div.textContent = text + until;
                 alertsEl.appendChild(div);
             });
+
+            const healthEl = document.getElementById("health");
+            healthEl.innerHTML = "";
+            const health = data.health || {};
+            if (health.silent) {
+                const div = document.createElement("div");
+                div.className = "alert-banner";
+                const nodes = (health.silent_nodes || []).join(", ");
+                let ackHtml;
+                if (health.acked_at && health.next_alert_at) {
+                    ackHtml = `Acknowledged — next re-alert ${new Date(health.next_alert_at).toLocaleString()}`;
+                } else {
+                    ackHtml = `<button id="ack-health">Acknowledge</button>`;
+                }
+                div.innerHTML = `<strong>System silent:</strong> ${nodes} not reporting. ${ackHtml}`;
+                healthEl.appendChild(div);
+            }
 
             const newKey = JSON.stringify((data.new_devices || []).map((d) => d.mac));
             if (newKey !== lastNewDevicesKey) {
@@ -359,6 +382,12 @@
                 alert(`Naming failed: ${err.message}`);
                 btn.disabled = false;
             }
+        });
+
+        document.getElementById("health").addEventListener("click", async (e) => {
+            if (e.target.id !== "ack-health") return;
+            await fetch("/api/acknowledge", { method: "POST" });
+            await loadStatus();
         });
 
         document.getElementById("update-now").addEventListener("click", updateNow);

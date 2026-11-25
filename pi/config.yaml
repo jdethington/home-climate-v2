@@ -32,3 +32,9 @@ nws:
   latitude: 33.3528
   longitude: -111.7890
   poll_interval_minutes: 15
+
+health:
+  silence_minutes: 30
+  realert_hours: 1
+  realert_after_ack_hours: 24
+  state_file: "health_state.json"
