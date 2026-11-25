@@ -35,3 +35,6 @@ nws:
 
 health:
   silence_minutes: 30
+  realert_hours: 1
+  realert_after_ack_hours: 24
+  state_file: "health_state.json"

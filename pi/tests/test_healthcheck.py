@@ -2,7 +2,10 @@
 
 from datetime import datetime, timedelta, timezone
 
-from healthcheck import find_silent_nodes, check_health
+from healthcheck import (
+    find_silent_nodes, check_health, decide_alert,
+    acknowledge_episode, fresh_state,
+)
 
 NOW = datetime(2026, 11, 25, 12, 0, tzinfo=timezone.utc)
 
@@ -81,3 +84,77 @@ def test_check_health_all_silent():
     status = check_health(db, 30, now=NOW)
     assert status["all_silent"] is True
     assert [n for n, _ in status["silent"]] == ["indoor1", "outdoor1"]
+
+def _status(silent, all_silent=False):
+    return {"checked_at": "2026-11-25T12:00:00+00:00", "total_nodes": 5,
+            "silent": silent, "all_silent": all_silent}
+
+
+def test_decide_new_episode_down():
+    kind, title, message = decide_alert(
+        fresh_state(), _status([("outdoor2", 45.0)]), NOW)
+    assert kind == "down"
+    assert "outdoor2" in message
+
+
+def test_decide_new_episode_all_silent():
+    kind, title, message = decide_alert(
+        fresh_state(),
+        _status([("indoor1", 40.0), ("outdoor1", 35.0)], all_silent=True),
+        NOW,
+    )
+    assert kind == "down"
+    assert title == "Home Climate: system down"
+
+
+def test_decide_ongoing_not_due():
+    state = fresh_state()
+    state.update({"silent": True,
+                  "silent_since": "2026-11-25T11:00:00+00:00",
+                  "next_alert_at": "2026-11-25T13:00:00+00:00"})
+    assert decide_alert(state, _status([("outdoor2", 60.0)]), NOW) == (
+        None, None, None)
+
+
+def test_decide_ongoing_due_realert():
+    state = fresh_state()
+    state.update({"silent": True,
+                  "silent_since": "2026-11-25T11:00:00+00:00",
+                  "next_alert_at": "2026-11-25T12:00:00+00:00"})
+    kind, title, _ = decide_alert(state, _status([("outdoor2", 60.0)]), NOW)
+    assert kind == "realert"
+    assert "still" in title.lower()
+
+
+def test_decide_acked_within_24h():
+    state = fresh_state()
+    state.update({"silent": True,
+                  "acked_at": "2026-11-25T11:30:00+00:00",
+                  "next_alert_at": "2026-11-26T11:30:00+00:00"})
+    assert decide_alert(state, _status([("outdoor2", 90.0)]), NOW) == (
+        None, None, None)
+
+
+def test_decide_recovered():
+    state = fresh_state()
+    state.update({"silent": True,
+                  "silent_since": "2026-11-25T11:00:00+00:00"})
+    kind, title, _ = decide_alert(state, _status([]), NOW)
+    assert kind == "recovered"
+
+
+def test_decide_healthy_no_episode():
+    assert decide_alert(fresh_state(), _status([]), NOW) == (
+        None, None, None)
+
+
+def test_acknowledge_sets_next_alert():
+    state = fresh_state()
+    state.update({"silent": True})
+    assert acknowledge_episode(state, NOW, 24) is True
+    assert state["acked_at"] == "2026-11-25T12:00:00+00:00"
+    assert state["next_alert_at"] == "2026-11-26T12:00:00+00:00"
+
+
+def test_acknowledge_no_episode():
+    assert acknowledge_episode(fresh_state(), NOW, 24) is False
