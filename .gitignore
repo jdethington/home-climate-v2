@@ -29,3 +29,6 @@ pi/firmware/version.json
 
 # Health-check runtime state (issue #54) — written by the checker, not source
 pi/health_state.json
+
+# Backup staging dir (issue #53) — timestamped snapshots, not source
+pi/backups/

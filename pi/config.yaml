@@ -38,3 +38,11 @@ health:
   realert_hours: 1
   realert_after_ack_hours: 24
   state_file: "health_state.json"
+
+backup:
+  local_dir: "backups"
+  keep_local_days: 7
+  keep_cloud_days: 30
+  destinations:
+    - "rclone:drive:homeclimate-backups"
+    # - "/media/piadmin/USB/backups"   # uncomment to also back up to a USB stick or other local drive
